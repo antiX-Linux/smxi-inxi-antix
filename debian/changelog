@@ -1,0 +1,147 @@
+smxi-inxi-antix (0.3.1) unstable; urgency=low 
+ 
+  * upstream inxi version 2.2.25 released 2015-06-15
+  
+ -- anticapitalista <antiX@operamail.com>  Tue, 16 Jun 2015 13:26:00 +0200
+
+
+smxi-inxi-antix (0.3.0) unstable; urgency=low 
+ 
+  * upstream inxi version 2.2.16 released 2014-11-03
+  
+ -- anticapitalista <antiX@operamail.com>  Sun, 09 Nov 2014 19:50:00 +0200
+
+
+smxi-inxi-antix (0.2.7) unstable; urgency=low 
+ 
+  * upstream inxi version 2.1.18 released 2014-04-04
+  
+ -- anticapitalista <antiX@operamail.com>  Sun, 06 Apr 2014 13:50:00 +0200
+
+
+smxi-inxi-antix (0.2.6) unstable; urgency=low 
+ 
+  * inxi version 2.1.7 released 2014-03-18
+  
+ -- anticapitalista <antiX@operamail.com>  Sat, 22 Mar 2014 17:40:00 +0200
+
+
+smxi-inxi-antix (0.2.5) unstable; urgency=low 
+ 
+  * inxi version 2.1.3 released 2014-03-16
+  
+ -- anticapitalista <antiX@operamail.com>  Mon, 17 Mar 2014 23:00:00 +0200
+
+
+smxi-inxi-antix (0.2.4) unstable; urgency=low 
+ 
+  * inxi version 2.0
+  
+ -- anticapitalista <antiX@operamail.com>  Thu, 13 Mar 2014 15:30:00 +0200
+
+
+smxi-inxi-antix (0.2.3) unstable; urgency=low 
+ 
+  * inxi version 1.9.18
+  
+ -- anticapitalista <antiX@operamail.com>  Sun, 09 Feb 2014 16:05:00 +0200
+
+
+smxi-inxi-antix (0.2.2) unstable; urgency=low 
+ 
+  * inxi version 1.9.16
+  * Packaged using dpkg-buildpackage.
+  * xz compressed deb.
+
+ -- anticapitalista <antiX@operamail.com>  Sat, 19 Oct 2013 13:05:00 +0200
+
+
+smxi-inxi-antix (0.2.1) unstable; urgency=low 
+ 
+  * inxi version 1.9.7
+ -- anticapitalista <antiX@operamail.com>  Mon, 27 May 2013 20:45:00 +0200
+
+
+smxi-inxi-antix (0.2.0) unstable; urgency=low 
+ 
+  * inxi version 1.9.6
+ -- anticapitalista <antiX@operamail.com>  Thu, 23 May 2013 10:55:00 +0200
+
+
+smxi-inxi-antix (0.1.9) unstable; urgency=low 
+ 
+  * inxi version 1.9.5
+ -- anticapitalista <antiX@operamail.com>  Sun, 19 May 2013 19:40:00 +0200
+
+
+smxi-inxi-antix (0.1.8) unstable; urgency=low 
+ 
+  * inxi version 1.8.45.
+
+ -- anticapitalista <antiX@operamail.com>  Tue, 09 Apr 2013 17:45:00 +0200
+
+
+smxi-inxi-antix (0.1.7) unstable; urgency=low 
+ 
+  * inxi version 1.8.34.
+
+ -- anticapitalista <antiX@operamail.com>  Sat, 02 February 2013 20:25:00 +0200
+
+
+smxi-inxi-antix (0.1.6) unstable; urgency=low 
+ 
+  * inxi version 1.8.32.
+
+ -- anticapitalista <antiX@operamail.com>  Thu, 24 January 2013 14:45:00 +0200
+
+
+smxi-inxi-antix (0.1.5.1) unstable; urgency=low 
+ 
+  * inxi version 1.8.27.
+
+ -- anticapitalista <antiX@operamail.com>  Mon, 14 January 2013 14:45:00 +0200
+
+
+smxi-inxi-antix (0.1.5) unstable; urgency=low 
+ 
+  * inxi version 1.8.23.
+
+ -- anticapitalista <antiX@operamail.com>  Tue, 27 November 2012 00:45:00 +0200
+
+
+smxi-inxi-antix (0.1.4) unstable; urgency=low 
+ 
+  * inxi version 1.8.20.
+
+ -- anticapitalista <antiX@operamail.com>  Sun, 04 November 2012 16:45:00 +0200
+
+
+smxi-inxi-antix (0.1.3) unstable; urgency=low 
+ 
+  * inxi version 1.8.14.
+  * man page moved to man1.
+
+ -- anticapitalista <antiX@operamail.com>  Sat, 06 October 2012 13:30:00 +0200
+
+
+smxi-inxi-antix (0.1.2) unstable; urgency=low 
+ 
+  * Fixed ownership bug.
+
+ -- anticapitalista <antiX@operamail.com>  Sun, 26 August 2012 23:30:00 +0200
+
+
+smxi-inx-iantix (0.1.1) unstable; urgency=low 
+ 
+  * inxi version 1.8.14.
+
+ -- anticapitalista <antiX@operamail.com>  Mon, 30 July 2012 23:30:00 +0200
+
+
+smxi-inxi-antix (0.1.0) unstable; urgency=low 
+ 
+  * Initial Release.
+  * Put smxi stub and inxi script into one package. 
+
+ -- anticapitalista <antiX@operamail.com>  Mon, 23 July 2012 13:30:00 +0200
+
