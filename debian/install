@@ -1,4 +1,2 @@
 sbin/*              /usr/sbin
-changelog.gz        /usr/share/doc/smxi-inxi-antix
-copyright           /usr/share/doc/smxi-inxi-antix
 inxi.1.gz           /usr/share/man/man1
