@@ -1,3 +1,24 @@
+smxi-inxi-antix (0.3.5) unstable; urgency=medium
+
+  * Updated inxi to 2.3.0 
+
+ -- anticapitalista <antix@operamail.com>  Wed, 20 Apr 2016 15:09:49 +0300
+
+smxi-inxi-antix (0.3.4) unstable; urgency=low 
+ 
+  * added basic depends to control file
+  
+ -- anticapitalista <antiX@operamail.com>  Fri, 01 Jan 2015 19:34:00 +0200
+
+
+smxi-inxi-antix (0.3.3) unstable; urgency=low 
+ 
+  * upstream inxi version 2.2.31 released 2015-11-15
+  * fixed failed build
+  
+ -- anticapitalista <antiX@operamail.com>  Sat, 05 Dec 2015 23:36:00 +0200
+
+
 smxi-inxi-antix (0.3.2) unstable; urgency=low 
  
   * upstream inxi version 2.2.31 released 2015-11-15
