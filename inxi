@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 ########################################################################
 ####  Script Name: inxi
-####  Version: 2.3.0
-####  Date: 2016-04-18
+####  Version: 2.3.4
+####  Date: 2016-11-03
 ####  Patch Number: 00
 ########################################################################
 ####  SPECIAL THANKS
@@ -32,7 +32,7 @@
 ####  Version control:
 ####   * https://github.com/smxi/inxi
 ####   * git: git pull https://github.com/smxi/inxi master
-####   * svn checkout url: https://github.com/smxi/inxi
+####   * source checkout url: https://github.com/smxi/inxi
 ####
 ####  This program is free software; you can redistribute it and/or modify
 ####  it under the terms of the GNU General Public License as published by
@@ -186,17 +186,18 @@
 ####  raid mdstat: http://www-01.ibm.com/support/docview.wss?uid=isg3T1011259
 ####               http://www.howtoforge.com/replacing_hard_disks_in_a_raid1_array
 ####               https://raid.wiki.kernel.org/index.php/Mdstat
+####  dmi data: http://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.0.pdf
 ########################################################################
 ####  TESTING FLAGS
 ####  inxi supports advanced testing triggers to do various things, using -! <arg>
 ####  -! 1  - triggers default B_TESTING_1='true' to trigger some test or other
 ####  -! 2  - triggers default B_TESTING_2='true' to trigger some test or other
 ####  -! 3  - triggers B_TESTING_1='true' and B_TESTING_2='true'
-####  -! 10 - triggers an update from the primary dev download server instead of svn
-####  -! 11 - triggers an update from svn branch one - if present, of course
-####  -! 12 - triggers an update from svn branch two - if present, of course
-####  -! 13 - triggers an update from svn branch three - if present, of course
-####  -! 14 - triggers an update from svn branch four - if present, of course
+####  -! 10 - triggers an update from the primary dev download server instead of source
+####  -! 11 - triggers an update from source branch one - if present, of course
+####  -! 12 - triggers an update from source branch two - if present, of course
+####  -! 13 - triggers an update from source branch three - if present, of course
+####  -! 14 - triggers an update from source branch four - if present, of course
 ####  -! <http://......> - Triggers an update from whatever server you list.
 ####  LOG FLAGS (logs to $HOME/.inxi/inxi.log with rotate 3 total)
 ####  -@ 8  - Basic data logging of generated data / array values
@@ -316,7 +317,7 @@ B_PCICONF='false'
 B_PCICONF_SET='false'
 # kde qdbus
 B_QDBUS='false'
-B_PORTABLE='false'
+B_POSSIBLE_PORTABLE='false'
 B_RAID_SET='false'
 B_ROOT='false'
 B_RUN_COLOR_SELECTOR='false'
@@ -401,6 +402,14 @@ B_FILE_TESTED='false'
 B_HDDTEMP_TESTED='false'
 B_MODINFO_TESTED='false'
 B_SUDO_TESTED='false'
+
+# cpu 64 bit able or not. Does not tell you actual kernel/OS installed
+# if ((1<<32)); then
+#   BITS=64
+# else
+#   BITS=32
+# fi
+# echo $BITS
 
 ### CONSTANTS/INITIALIZE - SOME MAY BE RESET LATER ###
 DCOPOBJ="default"
@@ -885,7 +894,7 @@ initialize_data()
 		# found a case of battery existing but having nothing in it on desktop mobo
 		# not all laptops show the first. /proc/acpi/battery is deprecated.
 		if [[ -n $( ls /proc/acpi/battery 2>/dev/null ) || -n $( ls /sys/class/power_supply/ 2>/dev/null )  ]];then
-			B_PORTABLE='true'
+			B_POSSIBLE_PORTABLE='true'
 		fi
 	fi
 	if [[ -e $FILE_CPUINFO ]]; then
@@ -1394,7 +1403,7 @@ error_handler()
 			error_message="unsupported testing option argument: -! $2"
 			;;
 		12)
-			error_message="the git branch download url: $2\nappears to be empty currently. Make sure there is an actual svn branch version\nactive before you try this again. Check https://github.com/smxi/inxi\nto verify the branch status."
+			error_message="the git branch download url: $2\nappears to be empty currently. Make sure there is an actual source branch version\nactive before you try this again. Check https://github.com/smxi/inxi\nto verify the branch status."
 			;;
 		13)
 			error_message="The -t option requires the following extra arguments (no spaces between letters/numbers):\nc m cm [required], for example: -t cm8 OR -t cm OR -t c9\n(numbers: 1-20, > 5 throttled to 5 in irc clients) You entered: $2"
@@ -1651,7 +1660,7 @@ script_self_updater()
 		fi
 	# now run the error handlers on any wget failure
 	else
-		if [[ $2 == 'svn server' ]];then
+		if [[ $2 == 'source server' ]];then
 			error_handler 8 "$downloader_error"
 		elif [[ $2 == 'alt server' ]];then
 			error_handler 10 "$1"
@@ -1858,6 +1867,12 @@ debug_data_collector()
 		else
 			touch $debug_data_dir/clang-absent
 		fi
+		if type -p systemd-detect-virt &>/dev/null;then
+			systemd-detect-virt &> $debug_data_dir/systemd-detect-virt-info.txt
+		else
+			touch $debug_data_dir/systemd-detect-virt-absent
+		fi
+		
 		cat /etc/src.conf &> $debug_data_dir/bsd-etc-src-conf.txt
 		cat /etc/make.conf &> $debug_data_dir/bsd-etc-make-conf.txt
 		cat /etc/issue &> $debug_data_dir/etc-issue.txt
@@ -2050,6 +2065,10 @@ debug_data_collector()
 				touch $debug_data_dir/kde-about-distro-absent
 			fi
 			echo $XDG_CURRENT_DESKTOP &> $debug_data_dir/xdg-current-desktop.txt
+			echo $XDG_SESSION_DESKTOP &> $debug_data_dir/xdg-session-desktop.txt
+			echo $DESKTOP_SESSION &> $debug_data_dir/desktop-session.txt
+			echo $GDMSESSION &> $debug_data_dir/gdmsession.txt
+			
 		fi
 		if [[ $1 == 'disk' || $1 == 'all' ]];then
 			echo 'Collecting dev, label, disk, uuid data, df...'
@@ -2765,7 +2784,7 @@ get_parameters()
 				fi
 				;;
 			U)	if [[ $B_ALLOW_UPDATE == 'true' ]];then
-					script_self_updater "$SCRIPT_DOWNLOAD" 'svn server' "$opt"
+					script_self_updater "$SCRIPT_DOWNLOAD" 'source server' "$opt"
 				else
 					error_handler 17 "-$opt"
 				fi
@@ -2875,22 +2894,22 @@ get_parameters()
 									script_self_updater "$SCRIPT_DOWNLOAD_DEV" 'dev server' "$opt $OPTARG"
 									;;
 								11)
-									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_1" 'svn: branch one server' "$opt $OPTARG"
+									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_1" 'branch one server' "$opt $OPTARG"
 									;;
 								12)
-									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_2" 'svn: branch two server' "$opt $OPTARG"
+									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_2" 'branch two server' "$opt $OPTARG"
 									;;
 								13)
-									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_3" 'svn: branch three server' "$opt $OPTARG"
+									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_3" 'branch three server' "$opt $OPTARG"
 									;;
 								14)
-									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_4" 'svn: branch four server' "$opt $OPTARG"
+									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_4" 'branch four server' "$opt $OPTARG"
 									;;
 								15)
-									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_BSD" 'svn: branch bsd server' "$opt $OPTARG"
+									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_BSD" 'branch bsd server' "$opt $OPTARG"
 									;;
 								16)
-									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_GNUBSD" 'svn: branch gnubsd server' "$opt $OPTARG"
+									script_self_updater "$SCRIPT_DOWNLOAD_BRANCH_GNUBSD" 'branch gnubsd server' "$opt $OPTARG"
 									;;
 								http*)
 									script_self_updater "$OPTARG" 'alt server' "$opt <http...>"
@@ -2999,13 +3018,13 @@ show_options()
 	network tool). Same as -Nni. Not shown with -F for user security reasons, you shouldn't paste your local/wan IP."
 	print_lines_basic "1" "-I" "Information: processes, uptime, memory, irc client (or shell type), $SCRIPT_NAME version."
 	print_lines_basic "1" "-l" "$partition_string_u labels. Default: short $partition_string -P. For full -p output, use: -pl (or -plu)."
-	print_lines_basic "1" "-m" "Memory (RAM) data. Physical system memory array(s), capacity, how many devices (slots) supported, and individual memory devices (sticks of memory etc). For devices, shows device locator, size, speed, type (like: DDR3). Also see -x, -xx, -xxx"
-	print_lines_basic "1" "-M" "Machine data. Motherboard, Bios, and if present, System Builder (Like Lenovo). Older systems/kernels without the required /sys data can use dmidecode instead, run as root. Dmidecode can be forced with -! 33"
+	print_lines_basic "1" "-m" "Memory (RAM) data. Physical system memory array(s), capacity, how many devices (slots) supported, and individual memory devices (sticks of memory etc). For devices, shows device locator, size, speed, type (like: DDR3). If neither -I nor -tm are selected, also shows ram used/total. Also see -x, -xx, -xxx"
+	print_lines_basic "1" "-M" "Machine data. Device type (desktop, server, laptop, VM etc.), Motherboard, Bios, and if present, System Builder (Like Lenovo). Shows UEFI/BIOS/UEFI [Legacy}. Older systems/kernels without the required /sys data can use dmidecode instead, run as root. Dmidecode can be forced with -! 33"
 	print_lines_basic "1" "-n" "Advanced Network card information. Same as -Nn. Shows interface, speed, mac id, state, etc."
 	print_lines_basic "1" "-N" "Network card information. With -x, shows PCI BusID, Port number."
 	print_lines_basic "1" "-o" "Unmounted $partition_string information (includes UUID and LABEL if available). Shows file system type if you have file installed, if you are root OR if you have added to /etc/sudoers (sudo v. 1.7 or newer) Example:^<username>^ALL^=^NOPASSWD:^/usr/bin/file^"
 	print_lines_basic "1" "-p" "Full $partition_string information (-P plus all other detected ${partition_string}s)."
-	print_lines_basic "1" "-P" "Basic $partition_string information (shows what -v^4 would show, but without extra data). Shows, if detected: / /boot /home /tmp /usr /var. Use -p to see all mounted ${partition_string}s."
+	print_lines_basic "1" "-P" "Basic $partition_string information (shows what -v^4 would show, but without extra data). Shows, if detected: / /boot /home /opt /tmp /usr /var /var/log /var/tmp . Use -p to see all mounted ${partition_string}s."
 	print_lines_basic "1" "-r" "Distro repository data. Supported repo types: APT; PACMAN; PISI; PORTAGE; PORTS (BSDs); SLACKPKG; URPMQ; YUM; ZYPP."
 	print_lines_basic "1" "-R" "RAID data. Shows RAID devices, states, levels, and components, and extra data with -x/-xx. md-raid: If device is resyncing, shows resync progress line as well."
 	print_lines_basic "1" "-s" "Sensors output (if sensors installed/configured): mobo/cpu/gpu temp; detected fan speeds. Gpu temp only for Fglrx/Nvidia drivers. Nvidia shows screen number for > 1 screens."
@@ -3109,13 +3128,13 @@ show_options()
 		print_lines_basic "1" "-! 2" "Sets testing flag B_TESTING_2='true' to trigger testing condition 2."
 		print_lines_basic "1" "-! 3" "Sets flags B_TESTING_1='true' and B_TESTING_2='true'."
 		if [[ $B_ALLOW_UPDATE == 'true' ]];then
-			print_lines_basic "1" "-! 10" "Triggers an update from the primary dev download server instead of svn."
-			print_lines_basic "1" "-! 11" "Triggers an update from svn branch one - if present, of course."
-			print_lines_basic "1" "-! 12" "Triggers an update from svn branch two - if present, of course."
-			print_lines_basic "1" "-! 13" "Triggers an update from svn branch three - if present, of course."
-			print_lines_basic "1" "-! 14" "Triggers an update from svn branch four - if present, of course."
-			print_lines_basic "1" "-! 15" "Triggers an update from svn branch BSD - if present, of course."
-			print_lines_basic "1" "-! 16" "Triggers an update from svn branch GNUBSD - if present, of course."
+			print_lines_basic "1" "-! 10" "Triggers an update from the primary dev download server instead of source server."
+			print_lines_basic "1" "-! 11" "Triggers an update from source branch one - if present, of course."
+			print_lines_basic "1" "-! 12" "Triggers an update from source branch two - if present, of course."
+			print_lines_basic "1" "-! 13" "Triggers an update from source branch three - if present, of course."
+			print_lines_basic "1" "-! 14" "Triggers an update from source branch four - if present, of course."
+			print_lines_basic "1" "-! 15" "Triggers an update from source branch BSD - if present, of course."
+			print_lines_basic "1" "-! 16" "Triggers an update from source branch GNUBSD - if present, of course."
 			print_lines_basic "1" "-! " "<http://......> Triggers an update from whatever server you list."
 			print_lines_basic "1" "" "Example: inxi^-!^http://yourserver.com/testing/inxi"
 		fi
@@ -4909,6 +4928,19 @@ get_desktop_environment()
 			fi
 		fi
 		desktop_environment="Unity"
+	elif [[ $XDG_CURRENT_DESKTOP == *Budgie* ]];then
+		version=$( get_program_version 'budgie-desktop' '^budgie-desktop' '2' )
+		# not certain will always have version, so keep output right if not
+		if [[ -n $version ]];then
+			version="$version "
+		fi
+		if [[ $B_EXTRA_DATA == 'true' ]];then
+			toolkit=$( get_de_gtk_data )
+			if [[ -n $toolkit ]];then
+				version="$version(Gtk $toolkit)"
+			fi
+		fi
+		desktop_environment="Budgie"
 	elif [[ $XDG_CURRENT_DESKTOP == 'LXQt' ]];then
 # 		if type -p lxqt-about &>/dev/null;then
 # 			version=$( get_program_version 'lxqt-about' '^lxqt-about' '2' )
@@ -5313,6 +5345,190 @@ get_de_gtk_data()
 	eval $LOGFE
 }
 
+get_device_data()
+{
+	eval $LOGFS
+	
+	local device='un-determined'
+	local chasis_id='' dmi_device=''
+	
+	# first: linked version
+	if [[ -e /sys/class/dmi/id/chassis_type ]];then
+		chasis_id=$(cat /sys/class/dmi/id/chassis_type)
+	elif [[ -e /sys/devices/virtual/dmi/id/chassis_type ]];then
+		chasis_id=$(cat /sys/devices/virtual/dmi/id/chassis_type)
+	fi
+	# src: http://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.0.pdf
+	# https://www.404techsupport.com/2012/03/pizza-box-lunch-box-and-other-pc-case-form-factors-identified-by-wmi/
+	if [[ $chasis_id != '' ]];then
+		case $chasis_id in
+			1)
+				device=$(get_device_vm)
+				;;
+			2)
+				device='unknown'
+				;;
+			# note: 13 is all-in-one which we take as a mac type system
+			3|4|6|7|13|15|24)
+				device='desktop'
+				;;
+			# 5 - pizza box was a 1 U desktop enclosure, but some old laptops also id this way
+			5)
+				device='pizza-box'
+				;;
+			# note: lenovo T420 shows as 10, notebook,  but it's not a notebook
+			9|10|16)
+				device='laptop'
+				;;
+			14)
+				device='notebook'
+				;;
+			8|11)
+				device='portable'
+				;;
+			17|23|25)
+				device='server'
+				;;
+			27|28|29)
+				device='blade'
+				;;
+			12)
+				device='docking-station'
+				;;
+			18)
+				device='expansion-chassis'
+				;;
+			19)
+				device='sub-chassis'
+				;;
+			20)
+				device='bus-expansion'
+				;;
+			21)
+				device='peripheral'
+				;;
+			22)
+				device='RAID'
+				;;
+			26)
+				device='compact-PCI'
+				;;
+		esac
+	else
+		if ! type -p dmidecode &>/dev/null;then
+			device='dmidecode-missing'
+		elif [[ $B_ROOT == 'false' ]];then
+			device='dmidecode-use-root'
+		else 
+			get_dmidecode_data
+			if [[ -n $DMIDECODE_DATA ]];then
+				if [[ $DMIDECODE_DATA == 'dmidecode-error-'* ]];then
+					device='dmidecode-no-info'
+				else
+					dmi_device=$( gawk '
+					BEGIN {
+						IGNORECASE=1
+						device="test"
+					}
+					/^Chassis Information/ {
+						device= $1
+						while (getline && !/^$/ ) {
+							if ( $1 ~ /^Type/ ) {
+								sub(/Type:\s*/,"",$0)
+								device = $0
+								break
+							}
+						}
+					}
+					END {
+						print device
+					}' <<< "$DMIDECODE_DATA" )
+					if [[ -n $dmi_device ]];then
+						device=$dmi_device
+					fi
+					if [[ $device == 'Other' ]];then
+						device=$(get_device_vm)
+					fi
+				fi
+			fi
+		fi
+	fi
+	echo $device
+	
+	eval $LOGFE
+}
+
+get_device_vm()
+{
+	eval $LOGFS
+	
+	local vm='other-vm?' vm_data='' vm_test=''
+	
+	# https://www.freedesktop.org/software/systemd/man/systemd-detect-virt.html
+	# note: unknown is how reliable this tool is
+	if type -p systemd-detect-virt &>/dev/null;then
+		vm_test=$(systemd-detect-virt 2>/dev/null | sed 's/none//' )
+		if [[ -n $vm_test && $vm_test != 'none' ]];then
+			vm=$vm_test
+		fi
+	fi
+	# some simple to detect linux vm id's
+	if [[ $vm == 'other-vm?' ]];then
+		if [[ -e /proc/vz ]];then
+			vm='openvz'
+		elif [[ -e /proc/xen ]];then
+			vm='xen'
+		elif [[ -e /dev/vzfs ]];then
+			vm='virtuozzo'
+		fi
+	fi
+	# this will catch many Linux systems and some BSDs
+	if [[ $vm == 'other-vm?' ]];then
+		vm_data=$vm_data$Lspci_v_Data
+		vm_data=$vm_data$Sysctl_a_Data
+		vm_data=$vm_data$Dmesg_Boot_Data
+		if [[ -e /dev/disk/by-id ]];then
+			vm_data=$vm_data$(ls -l /dev/disk/by-id 2>/dev/null )
+		fi
+		if [[ -n $( grep -iEs 'innotek|vbox|virtualbox' <<< $vm_data ) ]];then
+			vm='virtualbox'
+		elif [[ -n $( grep -is 'vmware' <<< $vm_data ) ]];then
+			vm='vmware'
+		elif [[ -n $( grep -is 'qemu' <<< $vm_data ) ]];then
+			vm='qemu-or-kvm'
+		elif [[ -n $( grep -s 'Virtual HD' <<< $vm_data ) ]];then
+			vm='hyper-v'
+		elif [[ -e /proc/cpuinfo && -n $( grep -is '^flags.*hypervisor' /proc/cpuinfo ) ]];then
+			vm='virtual-machine'
+		elif [[ -e /dev/vda || -e /dev/vdb || -e /dev/xvda || -e /dev/xvdb ]];then
+			vm='virtual-machine'
+		fi
+	fi
+	# this may catch some BSD and fringe Linux cases
+	if [[ $vm == 'other-vm?' && $B_ROOT == 'true' ]];then
+		if [[ -n $DMIDECODE_DATA && $DMIDECODE_DATA != 'dmidecode-error-'* ]];then
+			product_name=$(dmidecode -s system-product-name 2>/dev/null )
+			system_manufacturer=$( dmidecode -s system-manufacturer 2>/dev/null )
+			if [[ $product_name == 'VMware'* ]];then
+				vm='vmware'
+			elif [[ $product_name == 'VirtualBox'* ]];then
+				vm='virtualbox'
+			elif [[ $product_name == 'KVM'* ]];then
+				vm='kvm'
+			elif [[ $product_name == 'Bochs'* ]];then
+				vm='qemu'
+			elif [[ $system_manufacturer == 'Xen' ]];then
+				vm='xen'
+			elif [[ -n $( grep -i 'hypervisor' <<< "$DMIDECODE_DATA" ) ]];then
+				vm='virtual-machine'
+			fi
+		fi
+	fi
+	
+	echo $vm
+	
+	eval $LOGFE
+}
 
 # see which dm has started if any
 get_display_manager()
@@ -7030,7 +7246,7 @@ get_machine_data()
 {
 	eval $LOGFS
 	local a_temp='' separator='' id_file='' file_data='' array_string=''
-	local id_dir='/sys/class/dmi/id/' dmi_data='' 
+	local id_dir='/sys/class/dmi/id/' dmi_data='' firmware_type='BIOS'
 	local machine_files="
 	sys_vendor product_name product_version product_serial product_uuid 
 	board_vendor board_name board_version board_serial 
@@ -7042,6 +7258,11 @@ get_machine_data()
 		"
 	fi
 	if [[ -d $id_dir && $B_FORCE_DMIDECODE == 'false' ]];then
+		if [[ -d /sys/firmware/efi ]];then
+			firmware_type='UEFI'
+		elif [[ -n $(ls /sys/firmware/acpi/tables/UEFI* 2>/dev/null ) ]];then
+			firmware_type='UEFI [Legacy]'
+		fi
 		for id_file in $machine_files
 		do
 			file_data=''
@@ -7069,6 +7290,15 @@ get_machine_data()
 			array_string="$array_string$separator$file_data"
 			separator=','
 		done
+		if [[ $array_string != '' ]];then
+			# note: dmidecode has two more data types possible, so always add 2 more
+			if [[ $B_EXTRA_EXTRA_DATA == 'true' ]];then
+				array_string="$array_string,,"
+			else
+				array_string="$array_string,,,,,,"
+			fi
+			array_string="$array_string,$firmware_type"
+		fi
 	else
 		get_dmidecode_data
 		if [[ -n $DMIDECODE_DATA ]];then
@@ -7083,15 +7313,16 @@ get_machine_data()
 					baseboardProductName=""
 					baseboardSerialNumber=""
 					baseboardVersion=""
-					biosReleaseDate=""
-					biosRevision="" # only available from dmidecode
-					biosRomSize="" # only available from dmidecode
-					biosVendor=""
-					biosVersion=""
 					chassisManufacturer=""
 					chassisSerialNumber=""
 					chassisType=""
 					chassisVersion=""
+					firmwareReleaseDate=""
+					firmwareRevision="" # only available from dmidecode
+					firmwareRomSize="" # only available from dmidecode
+					firmwareType="BIOS"
+					firmwareVendor=""
+					firmwareVersion=""
 					systemManufacturer=""
 					systemProductName=""
 					systemVersion=""
@@ -7107,13 +7338,14 @@ get_machine_data()
 				}
 				/^Bios Information/ {
 					while ( getline && !/^$/ ) {
-						if ( $1 ~ /^Release Date/ ) { biosReleaseDate=$2 }
-						if ( $1 ~ /^BIOS Revision/ ) { biosRevision=$2 }
-						if ( $1 ~ /^ROM Size/ ) { biosRomSize=$2 }
-						if ( $1 ~ /^Vendor/ ) { biosVendor=$2 }
-						if ( $1 ~ /^Version/ ) { biosVersion=$2 }
+						if ( $1 ~ /^Release Date/ ) { firmwareReleaseDate=$2 }
+						if ( $1 ~ /^BIOS Revision/ ) { firmwareRevision=$2 }
+						if ( $1 ~ /^ROM Size/ ) { firmwareRomSize=$2 }
+						if ( $1 ~ /^Vendor/ ) { firmwareVendor=$2 }
+						if ( $1 ~ /^Version/ ) { firmwareVersion=$2 }
+						if ( $1 ~ /^UEFI is supported/ ) { firmwareType="UEFI" }
 					}
-					testString=biosReleaseDate biosRevision biosRomSize biosVendor biosVersion
+					testString=firmwareReleaseDate firmwareRevision firmwareRomSize firmwareVendor firmwareVersion
 					if ( testString != ""  ) {
 						bItemFound="true"
 					}
@@ -7168,10 +7400,10 @@ get_machine_data()
 					if ( bItemFound == "true" ) {
 						fullString = systemManufacturer "," systemProductName "," systemVersion "," systemSerialNumber 
 						fullString = fullString "," systemUuid "," baseboardManufacturer "," baseboardProductName 
-						fullString = fullString "," baseboardVersion "," baseboardSerialNumber "," biosVendor
-						fullString = fullString "," biosVersion "," biosReleaseDate "," chassisManufacturer
+						fullString = fullString "," baseboardVersion "," baseboardSerialNumber "," firmwareVendor
+						fullString = fullString "," firmwareVersion "," firmwareReleaseDate "," chassisManufacturer
 						fullString = fullString "," chassisType "," chassisVersion "," chassisSerialNumber 
-						fullString = fullString ","  biosRevision "," biosRomSize
+						fullString = fullString ","  firmwareRevision "," firmwareRomSize "," firmwareType
 						
 						print fullString
 					}
@@ -8189,7 +8421,7 @@ get_partition_data()
 	}
 	# this handles yet another fredforfaen special case where a mounted drive
 	# has the search string in its name
-	$NF ~ /^\/$|^\/boot$|^\/var$|^\/home$|^\/tmp$|^\/usr$/ {
+	$NF ~ /^\/$|^\/boot$|^\/var$|^\/var\/tmp$|^\/var\/log$|^\/home$|^\/opt$|^\/tmp$|^\/usr$/ {
 		# note, older df in bsd do not have file system column
 		if ( NF == "7" && $(NF - 1) ~ /[0-9]+%/ ) {
 			fileSystem=$(NF - 5)
@@ -8207,7 +8439,7 @@ get_partition_data()
 	}
 	# skip all these, including the first, header line. Use the --exclude-type
 	# to handle new filesystems types we do not want listed here
-	$NF !~ /^\/$|^\/boot$|^\/var$|^\/home$|^\/tmp$|^\/usr$|^filesystem/ {
+	$NF !~ /^\/$|^\/boot$|^\/var$|^\/var\/tmp$|^\/var\/log$|^\/home$|^\/opt$|^\/tmp$|^\/usr$|^filesystem/ {
 		# this is to avoid file systems with spaces in their names, that will make
 		# the test show the wrong data in each of the fields, if no x%, then do not use
 		# using 3 cases, first default, standard, 2nd, 3rd, handles one and two spaces in name
@@ -12537,7 +12769,7 @@ print_hard_disk_data()
 						hdd_temp_data=${a_hdd_working[5]}
 						# error handling is done in get data function
 						if [[ -n $hdd_temp_data ]];then
-							hdd_temp_data=" ${C1}temp$SEP3${C2} ${hdd_temp_data}C"
+							hdd_temp_data="${C1}temp$SEP3${C2} ${hdd_temp_data}C "
 						else
 							hdd_temp_data=''
 						fi
@@ -12547,7 +12779,7 @@ print_hard_disk_data()
 						if [[ -z $hdd_serial ]];then
 							hdd_serial='N/A'
 						fi
-						hdd_serial=" ${C1}serial$SEP3${C2} $hdd_serial"
+						hdd_serial="${C1}serial$SEP3${C2} $hdd_serial "
 					fi
 					dev_data="$dev_string${a_hdd_working[0]} "
 				fi
@@ -12558,61 +12790,90 @@ print_hard_disk_data()
 				fi
 				# echo "loop: $i"
 				hdd_name="${C1}model$SEP3${C2} $hdd_name_temp"
-				hdd_string="${C1}ID-$((i+1))$SEP3${C2} $usb_data$dev_data$hdd_name$size_data$hdd_serial$hdd_temp_data"
+				hdd_string="${C1}ID-$((i+1))$SEP3${C2} $usb_data$dev_data$hdd_name$size_data"
 				part_1_data="$hdd_model$hdd_string "
-				
+				part_2_data="$hdd_serial$hdd_temp_data"
+				## Forcing the capacity to print on its own row, and the first drive on its own
+				## then each disk prints on its own line, or two lines, depending on console/output width
 				if [[ $i -eq 0 ]];then
-					if [[ $( calculate_line_length "$row_starter$part_1_data" ) -gt $COLS_INNER ]];then
+					#if [[ $( calculate_line_length "$row_starter$part_1_data" ) -gt 80 ]];then
+					if [[ -n $row_starter ]];then
 						hdd_data=$( create_print_line "$Line_Starter" "$row_starter" )
 						print_screen_output "$hdd_data"
 						#echo 0
 						Line_Starter=' '
 						row_starter=''
+					fi
+					if [[ $( calculate_line_length "$part_1_data$part_2_data" ) -gt $COLS_INNER ]];then
 						hdd_data=$( create_print_line "$Line_Starter" "$part_1_data" )
 						print_screen_output "$hdd_data"
 						part_1_data=''
-						#echo 1
+						hdd_data=$( create_print_line "$Line_Starter" "$part_2_data" )
+						print_screen_output "$hdd_data"
+						part_2_data=''
 					else
-						hdd_data=$( create_print_line "$Line_Starter" "$row_starter$part_1_data" )
+						hdd_data=$( create_print_line "$Line_Starter" "$part_1_data$part_2_data" )
 						print_screen_output "$hdd_data"
-						Line_Starter=' '
-						row_starter=''
 						part_1_data=''
-						#echo 2
-					fi
-				fi
-				if [[ $( calculate_line_length "$row_starter$part_2_data$part_1_data" ) -gt $COLS_INNER ]];then
-					if [[ -n $( grep -vE '^[[:space:]]*$' <<< $part_2_data ) ]];then
-						hdd_data=$( create_print_line "$Line_Starter" "$row_starter$part_2_data" )
-						print_screen_output "$hdd_data"
-						#echo 3
-						Line_Starter=' '
-						row_starter=''
 						part_2_data=''
 					fi
-					hdd_data=$( create_print_line "$Line_Starter" "$row_starter$part_1_data" )
-					print_screen_output "$hdd_data"
-					part_1_data=''
-					#echo 4
-				elif [[ -n $part_2_data && \
-						$( calculate_line_length "$row_starter$part_2_data$part_1_data" ) -le $COLS_INNER ]];then
-					hdd_data=$( create_print_line "$Line_Starter" "$row_starter$part_2_data$part_1_data" )
-					print_screen_output "$hdd_data"
-					#echo 3
-					Line_Starter=' '
-					row_starter=''
-					part_1_data=''
-					part_2_data=''
+						#echo 1
+					#else
+					#	hdd_data=$( create_print_line "$Line_Starter" "$row_starter$part_1_data" )
+					#	print_screen_output "$hdd_data"
+					#	Line_Starter=' '
+					#	row_starter=''
+					#	part_1_data=''
+						#echo 2
+					#fi
 				else
-					part_2_data=$part_1_data
+					if [[ $( calculate_line_length "$part_1_data$part_2_data" ) -gt $COLS_INNER ]];then
+						hdd_data=$( create_print_line "$Line_Starter" "$part_1_data" )
+						print_screen_output "$hdd_data"
+						part_1_data=''
+						hdd_data=$( create_print_line "$Line_Starter" "$part_2_data" )
+						print_screen_output "$hdd_data"
+						part_2_data=''
+					else
+						hdd_data=$( create_print_line "$Line_Starter" "$part_1_data$part_2_data" )
+						print_screen_output "$hdd_data"
+						part_1_data=''
+						part_2_data=''
+					fi
 				fi
+				
+# 				if [[ $( calculate_line_length "$part_2_data$part_1_data" ) -gt $COLS_INNER ]];then
+# 					if [[ -n $( grep -vE '^[[:space:]]*$' <<< $part_2_data ) ]];then
+# 						hdd_data=$( create_print_line "$Line_Starter" "$part_2_data" )
+# 						print_screen_output "$hdd_data"
+# 						#echo 3
+# 						Line_Starter=' '
+# 						#row_starter=''
+# 						part_2_data=''
+# 					fi
+# 					hdd_data=$( create_print_line "$Line_Starter" "$part_1_data" )
+# 					print_screen_output "$hdd_data"
+# 					part_1_data=''
+# 					#echo 4
+# 				elif [[ -n $part_2_data && \
+# 						$( calculate_line_length "$part_2_data$part_1_data" ) -le $COLS_INNER ]];then
+# 					hdd_data=$( create_print_line "$Line_Starter" "$part_2_data$part_1_data" )
+# 					print_screen_output "$hdd_data"
+# 					#echo 3
+# 					Line_Starter=' '
+# 					#row_starter=''
+# 					part_1_data=''
+# 					part_2_data=''
+# 				else
+# 					part_2_data=$part_1_data
+# 				fi
 			done
 			# then print any leftover items
-			if [[ -n $part_2_data ]];then
-				hdd_data=$( create_print_line "$Line_Starter" "$part_2_data" )
-				print_screen_output "$hdd_data"
-				#echo 5
-			fi
+# 			if [[ -n $part_2_data ]];then
+# 				hdd_data=$( create_print_line "$Line_Starter" "$part_2_data" )
+# 				print_screen_output "$hdd_data"
+# 				#echo 5
+# 			fi
 		fi
 	else
 		hdd_data="$row_starter"
@@ -12773,13 +13034,14 @@ print_machine_data()
 {
 	eval $LOGFS
 	
-	local system_line='' mobo_line='' bios_line='' chassis_line=''
+	local system_line='' mobo_line='' bios_line='' chassis_line='' #firmware_type='BIOS'
 	local mobo_vendor='' mobo_model='' mobo_version='' mobo_serial=''
 	local bios_vendor='' bios_version='' bios_date='' bios_rom='' error_string=''
 	local system_vendor='' product_name='' product_version='' product_serial='' product_uuid=''
 	local chassis_vendor='' chassis_type='' chassis_version='' chassis_serial='' 
 	local b_skip_system='false' b_skip_chassis='false'
 	local sysDmiNull='No /sys/class/dmi machine data: try newer kernel, or install dmidecode'
+	local device=$(get_device_data)
 	# set A_MACHINE_DATA
 	get_machine_data
 	
@@ -12787,9 +13049,11 @@ print_machine_data()
 	## keys for machine data are:
 	# 0-sys_vendor 1-product_name 2-product_version 3-product_serial 4-product_uuid 
 	# 5-board_vendor 6-board_name 7-board_version 8-board_serial 
-	# 9-bios_vendor 10-bios_version 11-bios_date 
+	# 9-bios_vendor 10-bios_version 11-bios_date
 	## with extra data: 
 	# 12-chassis_vendor 13-chassis_type 14-chassis_version 15-chassis_serial
+	## unused: 16-firmware_revision  17-firmware_romsize
+	# 
 	# a null array always has a count of 1
 	if [[ ${#A_MACHINE_DATA[@]} -gt 1 ]];then
 		# note: in some case a mobo/version will match a product name/version, do not print those
@@ -12798,7 +13062,7 @@ print_machine_data()
 		if [[ -z ${A_MACHINE_DATA[0]} ]];then
 			b_skip_system='true'
 		else
-			if [[ $B_PORTABLE != 'true'  ]];then
+			if [[ $B_POSSIBLE_PORTABLE != 'true'  ]];then
 				# ibm / ibm can be true; dell / quantum is false, so in other words, only do this
 				# in case where the vendor is the same and the version is the same and not null, 
 				# otherwise the version information is going to be different in all cases I think
@@ -12833,6 +13097,10 @@ print_machine_data()
 					chassis_line="${C1}Chassis$SEP3${C2}$chassis_vendor$chassis_type$chassis_version$chassis_serial"
 				fi
 			fi
+		fi
+		# echo ${A_MACHINE_DATA[@]}
+		if [[ -n ${A_MACHINE_DATA[18]} ]];then
+			firmware_type=${A_MACHINE_DATA[18]}
 		fi
 		if [[ -n ${A_MACHINE_DATA[5]} ]];then
 			mobo_vendor=${A_MACHINE_DATA[5]}
@@ -12872,20 +13140,17 @@ print_machine_data()
 			bios_rom=" ${C1}rom size$SEP3${C2} ${A_MACHINE_DATA[17]}"
 		fi
 		mobo_line="${C1}Mobo$SEP3${C2} $mobo_vendor ${C1}model$SEP3${C2} $mobo_model$mobo_version$mobo_serial"
-		bios_line="${C1}Bios$SEP3${C2} $bios_vendor ${C1}v$SEP3${C2} $bios_version ${C1}date$SEP3${C2} $bios_date$bios_rom"
+		bios_line="${C1}$firmware_type$SEP3${C2} $bios_vendor ${C1}v$SEP3${C2} $bios_version ${C1}date$SEP3${C2} $bios_date$bios_rom"
 		if [[ $( calculate_line_length "$mobo_line$bios_line" ) -lt $COLS_INNER ]];then
 			mobo_line="$mobo_line $bios_line"
 			bios_line=''
 		fi
 		if [[ $b_skip_system == 'true' ]];then
-			system_line=$mobo_line
+			system_line="${C1}Device$SEP3${C2} $device $mobo_line"
 			mobo_line=''
 		else
 			# this has already been tested for above so we know it's not null
 			system_vendor=${A_MACHINE_DATA[0]}
-			if [[ $B_PORTABLE == 'true' ]];then
-				system_vendor="$system_vendor (portable)"
-			fi
  			if [[ -n ${A_MACHINE_DATA[1]} ]];then
 				product_name=${A_MACHINE_DATA[1]}
 			else
@@ -12897,7 +13162,7 @@ print_machine_data()
 			if [[ -n ${A_MACHINE_DATA[3]} && $B_OUTPUT_FILTER != 'true' ]];then
 				product_serial=" ${C1}serial$SEP3${C2} ${A_MACHINE_DATA[3]} "
 			fi
-			system_line="${C1}System$SEP3${C2} $system_vendor ${C1}product$SEP3${C2} $product_name$product_version$product_serial"
+			system_line="${C1}Device$SEP3${C2} $device ${C1}System$SEP3${C2} $system_vendor ${C1}product$SEP3${C2} $product_name$product_version$product_serial"
 			if [[ -n $chassis_line && $( calculate_line_length "$system_line$chassis_line" ) -lt $COLS_INNER ]];then
 				system_line="$system_line $chassis_line"
 				chassis_line=''
@@ -13979,7 +14244,7 @@ print_ram_data()
 	local manufacturer='' part_nu='' serial_nu='' device_speed='' configured_speed='' bus_width=
 	local data_width='' total_width='' device_type='' device_type_detail='' bank='' slot='' form_factor=''
 	local device_size='' array_use='' location='' error_correction='' max_capacity='' nu_of_devices=''
-	local max_module_size='' module_voltage='' bank_connection=''
+	local max_module_size='' module_voltage='' bank_connection='' memory_info=''
 	
 	get_ram_data
 	#echo ${#A_MEMORY_DATA[@]}
@@ -13989,6 +14254,9 @@ print_ram_data()
 			error_string=$( print_dmidecode_error 'default' "${A_MEMORY_DATA[0]}" )
 			memory_line="${C2}$error_string"
 		else
+			if [[ $B_SHOW_INFO == 'false' && $B_SHOW_PS_MEM_DATA == 'false' ]];then
+				memory_info="${C1}Used/Total$SEP3${C2} $( get_memory_data )"
+			fi
 			for (( i=0;i<${#A_MEMORY_DATA[@]};i++ ))
 			do
 				IFS=','
@@ -14006,6 +14274,12 @@ print_ram_data()
 				max_module_size='' 
 				module_voltage=''
 				bank_connection=''
+				if [[ -n $memory_info ]];then
+					memory_line=$( create_print_line "$line_starter" "$memory_info" )
+					print_screen_output "$memory_line"
+					line_starter=''
+					memory_info=''
+				fi
 				# memory-array,0x0012,System Board,8 GB,4,System Memory,None,max size,moudule voltage
 				if [[ ${a_memory_item[0]} == 'memory-array' ]];then
 					if [[ -n ${a_memory_item[4]} ]];then
@@ -14697,7 +14971,7 @@ print_weather_data()
 					time_string=''
 					observation_time=''
 				fi
-				# the last three are oftenblank
+				# the last three are often blank
 				if [[ -z "$heat_index$wind_chill$dew_point" ]];then
 					weather_data=$( create_print_line " " "$pressure$location_string" )
 					print_screen_output "$weather_data"
