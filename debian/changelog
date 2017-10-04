@@ -1,3 +1,45 @@
+smxi-inxi-antix (0.3.15) unstable; urgency=medium
+
+  * Updated inxi to 2.3.40
+
+ -- anticapitalista <antix@operamail.com>  Mon, 02 Oct 2017 22:44:34 +0300
+
+smxi-inxi-antix (0.3.14) unstable; urgency=medium
+
+  * Added Provides: inxi
+
+ -- anticapitalista <antix@operamail.com>  Thu, 22 Jun 2017 20:45:49 +0300
+
+smxi-inxi-antix (0.3.13) unstable; urgency=medium
+
+  * Updated inxi to latest version upstream - 2.3.21
+
+ -- anticapitalista <antix@operamail.com>  Wed, 14 Jun 2017 17:54:46 +0300
+
+smxi-inxi-antix (0.3.12) unstable; urgency=medium
+
+  * Updated inxi to latest version upstream - 2.3.17
+
+ -- anticapitalista <antix@operamail.com>  Fri, 09 Jun 2017 21:43:36 +0300
+
+smxi-inxi-antix (0.3.11) unstable; urgency=medium
+
+  * Updated inxi to latest version upstream - 2.3.11
+
+ -- anticapitalista <antix@operamail.com>  Tue, 06 Jun 2017 14:57:59 +0300
+
+smxi-inxi-antix (0.3.10) unstable; urgency=medium
+
+  * fixed broken sym links
+
+ -- anticapitalista <antix@operamail.com>  Mon, 05 Jun 2017 13:18:17 +0300
+
+smxi-inxi-antix (0.3.9) unstable; urgency=medium
+
+  * Added mx-version
+
+ -- anticapitalista <antix@operamail.com>  Wed, 26 Apr 2017 00:31:48 +0300
+
 smxi-inxi-antix (0.3.8) unstable; urgency=medium
 
   * inxi version updated to 2.3.8
