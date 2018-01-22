@@ -1,3 +1,24 @@
+smxi-inxi-antix (0.4.2) unstable; urgency=medium
+
+  * updatd inxi to 2.3.54
+
+ -- anticapitalista <antix@operamail.com>  Sun, 14 Jan 2018 23:03:11 +0200
+
+smxi-inxi-antix (0.4.1) unstable; urgency=medium
+
+  * updatd inxi to 2.3.53
+  * updated smxi to 8.15.26
+  * no longer using smxi stub - all scripts now in /usr/local/bin not /usr/sbin
+
+ -- anticapitalista <antix@operamail.com>  Fri, 08 Dec 2017 18:45:57 +0200
+
+smxi-inxi-antix (0.4.0) unstable; urgency=medium
+
+  * Updated inxi to 2.3.43
+  * Bumped version
+  
+ -- anticapitalista <antix@operamail.com>  Fri, 10 Nov 2017 14:22:41 +0200
+
 smxi-inxi-antix (0.3.15) unstable; urgency=medium
 
   * Updated inxi to 2.3.40
