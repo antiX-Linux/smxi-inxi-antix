@@ -1,2 +1,4 @@
 bin/* 	usr/local/bin
 inxi.1.gz 	usr/share/man/man1
+inxi.conf   /etc
+inxi.conf   /root/.conf
