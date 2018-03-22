@@ -1,6 +1,7 @@
 smxi-inxi-antix (0.4.3) unstable; urgency=medium
 
   * Using perl based inxi
+  * added inxi.conf to /etc
 
  -- anticapitalista <antix@operamail.com>  Tue, 20 Mar 2018 13:54:33 +0200
 

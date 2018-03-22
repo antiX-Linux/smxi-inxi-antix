@@ -29,7 +29,6 @@ use Getopt::Long qw(GetOptions);
 # Note: default auto_abbrev is enabled, that's fine
 Getopt::Long::Configure ('bundling', 'no_ignore_case', 
 'no_getopt_compat', 'no_auto_abbrev','pass_through');
-# use Net::FTP; # load this where it's used in debugger only
 # use Path::Class; # maybe use, maybe not, for ls /sys
 use POSIX qw(uname strftime ttyname);
 # use Time::HiRes qw(gettimeofday tv_interval);
@@ -37,8 +36,8 @@ use POSIX qw(uname strftime ttyname);
 
 ## INXI INFO ##
 my $self_name='inxi';
-my $self_version='2.9.01';
-my $self_date='2018-03-20';
+my $self_version='2.9.03';
+my $self_date='2018-03-21';
 my $self_patch='00';
 ## END INXI INFO ##
 
@@ -72,7 +71,7 @@ my ( %alerts, %client, %colors, %dl, %files, %rows, %system_files, %use );
 my (@app,@dmesg_boot,@dmi,@gpudata,@ifs,@ifs_bsd,@pci,@ps_aux,@ps_cmd,
 @sysctl,@sysctl_battery,@sysctl_sensors,@sysctl_machine,@usb);
 ## Disk arrays 
-my (@dm_boot_disk,@dm_boot_optical,@glabel,@gpart,@labels,@partitions,
+my (@dm_boot_disk,@dm_boot_optical,@glabel,@gpart,@labels,@lsblk,@partitions,
 @raid,@sysctl_disks,@uuids);
 my @test = (0,0,0,0,0);
 
@@ -80,11 +79,11 @@ my @test = (0,0,0,0,0);
 
 ## Booleans
 my ($b_arm,$b_console_irc,$b_debug_gz,$b_display,$b_dmesg_boot_check,$b_dmi,
-$b_dmidecode_force,$b_gpudata,$b_irc,$b_log,$b_log_colors,$b_log_full,$b_mem,
-$b_pci,$b_root,$b_running_in_display,$b_sysctl,$b_usb_check);
+$b_dmidecode_force,$b_gpudata,$b_irc,$b_log,$b_log_colors,$b_log_full,$b_man,
+$b_mem,$b_pci,$b_root,$b_running_in_display,$b_sysctl,$b_usb_check);
 ## Disk checks
-my ($b_dm_boot_disk,$b_dm_boot_optical,$b_glabel,$b_partitions,$b_partition_extra,
-$b_raid);
+my ($b_dm_boot_disk,$b_dm_boot_optical,$b_glabel,$b_lsblk,$b_partitions,
+$b_partition_extra,$b_raid);
 my ($b_sysctl_disk,$b_update,$b_weather) = (1,1,1);
 
 ## System
@@ -688,6 +687,10 @@ sub set_colors {
 			}
 		}
 	}
+	# force 0 for | or > output, all others prints to irc or screen
+	if (!$b_irc && ! -t STDOUT){
+		$color_scheme = 0;
+	}
 	set_color_scheme($color_scheme);
 	eval $end if $b_log;
 }
@@ -739,8 +742,8 @@ sub get_configs {
 # args: 0: key; 1: value
 sub get_config_item {
 	my ($key,$val) = @_;
-	if ($key eq 'B_ALLOW_UPDATE') {$b_update = int($val)}
-	elsif ($key eq 'B_ALLOW_WEATHER') {$b_weather = int($val)}
+	if ($key eq 'ALLOW_UPDATE' || $key eq 'B_ALLOW_UPDATE') {$b_update = int($val)}
+	elsif ($key eq 'ALLOW_WEATHER' || $key eq 'B_ALLOW_WEATHER') {$b_weather = int($val)}
 	elsif ($key eq 'CPU_SLEEP') {$cpu_sleep = $val if $val =~ /^[0-9\.]$/}
 	elsif ($key eq 'DL_TIMEOUT') {$dl_timeout = int($val)}
 	elsif ($key eq 'DOWNLOADER') {
@@ -1000,10 +1003,10 @@ sub set_config_color_scheme {
 	open( $w_fh, '>', $user_config_file ) or error_handler('open', $user_config_file, $!);
 	foreach ( @file_lines ) { 
 		if ( $_ =~ /^$configs{'variable'}/ ){
-			$_ = "$configs{'variable'}=$value\n";
+			$_ = "$configs{'variable'}=$value";
 			$b_found = 1;
 		}
-		print $w_fh "$_";
+		print $w_fh "$_\n";
 	}
 	if (! $b_found ){
 		print $w_fh "$configs{'variable'}=$value\n";
@@ -1191,12 +1194,6 @@ sub set_debugger {
 {
 package SystemDebugger;
 
-# use warnings;
-# use strict;
-# use diagnostics;
-# use 5.008;
-# use Net::FTP; # never load until needed
-
 # use File::Find q(find);
 #no warnings 'File::Find';
 # use File::Spec::Functions;
@@ -1374,6 +1371,14 @@ sub disk_data {
 	['df', '-k -T'],
 	['df', '-k -T -P'],
 	['df', '-P'],
+	['lsblk', '-fs'],
+	['lsblk', '-rfs'],
+	['lsblk', '-a'],
+	['lsblk', '-ra'],
+	['lsblk', '-r --output TYPE,NAME,RM,FSTYPE'],
+	['lsblk', '-r --output TYPE,NAME,RM,FSTYPE,SIZE'],
+	['lsblk', '-br --output TYPE,NAME,RM,FSTYPE,SIZE'],
+	['lsblk', '-Pb --output TYPE,NAME,RM,FSTYPE,SIZE'],
 	['gpart', 'list'],
 	['gpart', 'show'],
 	['gpart', 'status'],
@@ -1939,10 +1944,14 @@ sub download_file {
 	# print "$dl{'no-ssl-opt'}\n";
 	# print "$dl{'dl'}\n";
 	# tiny supports spider sort of
+	## NOTE: 1 is success, 0 false for Perl
 	if ($dl{'dl'} eq 'tiny' ){
 		$cmd = "Using tiny: type: $type \nurl: $url \nfile: $file";
 		$result = get_file($type, $url, $file);
+		$debug_data = $result;
 	}
+	# But: 0 is success, and 1 is false for these
+	# when strings are returned, they will be taken as true
 	else {
 		if ($type eq 'stdout'){
 			$args = $dl{'stdout'};
@@ -1954,13 +1963,13 @@ sub download_file {
 			$args = $dl{'file'};
 			$cmd = "$dl{'dl'} $dl{'no-ssl-opt'} $timeout $args $file $url $dl{'null'}";
 			system($cmd);
-			$result = $?;
+			$result = ($?) ? 0 : 1; # reverse these into Perl t/f
 			$debug_data = $result;
 		}
 		elsif ( $dl{'dl'} eq 'wget' && $type eq 'spider'){
 			$cmd = "$dl{'dl'} $dl{'no-ssl-opt'} $timeout $dl{'spider'} $url";
 			system($cmd);
-			$result = $?;
+			$result = ($?) ? 0 : 1; # reverse these into Perl t/f
 			$debug_data = $result;
 		}
 	}
@@ -2124,7 +2133,7 @@ sub error_handler {
 		elsif ( $err eq 'open-dir' ) { 
 			$errno=46; "Error opening directory: $one \nError: $two" }
 		elsif ( $err eq 'output-file-bad' ) { 
-			$errno=47; "The output directory path is not writable, or no file name was included:\nPath given: $two" }
+			$errno=47; "Value for --output-file must be full path, a writable directory, \nand include file name. Path: $two" }
 		elsif ( $err eq 'not-writable' ) { 
 			$errno=48; "The file: $one is not writable!" }
 		elsif ( $err eq 'open-dir-failed' ) { 
@@ -2255,7 +2264,7 @@ sub check_items {
 			$info_os = 'info-bsd';
 		}
 		else {
-			@data = qw(dig dmidecode file hddtemp ifconfig ip lsusb modinfo 
+			@data = qw(dig dmidecode file hddtemp ifconfig ip lsblk lsusb modinfo 
 			runlevel sensors strings sudo tree uptime);
 		}
 		$b_program = 1;
@@ -2481,7 +2490,7 @@ sub item_data {
 	'rpm' => '',
 	}),
 	'file' => ({
-	'info' => '-o unmounted file system',
+	'info' => '-o unmounted file system (if no lsblk)',
 	'info-bsd' => '-o unmounted file system',
 	'apt' => 'file',
 	'pacman' => 'file',
@@ -2535,6 +2544,13 @@ sub item_data {
 	'apt' => 'iproute',
 	'pacman' => 'iproute2',
 	'rpm' => 'iproute',
+	}),
+	'lsblk' => ({
+	'info' => '-o unmounted file system (best option)',
+	'info-bsd' => '-o unmounted file system',
+	'apt' => 'util-linux',
+	'pacman' => 'util-linux',
+	'rpm' => 'util-linux-ng',
 	}),
 	'lsusb' => ({
 	'info' => '-A usb audio; -N usb networking; --usb',
@@ -3106,7 +3122,7 @@ sub get_defaults {
 	'inxi-dev' => 'https://smxi.org/in/',
 	'inxi-main' => 'https://github.com/smxi/inxi/raw/master/',
 	'inxi-pinxi' => 'https://github.com/smxi/inxi/raw/inxi-perl/',
-	'inxi-man' => "https://github.com/smxi/inxi/raw/master/$self_name.1.gz",
+	'inxi-man' => "https://smxi.org/in/$self_name.1.gz",
 	);
 	if ( exists $defaults{$type}){
 		return $defaults{$type};
@@ -3124,7 +3140,6 @@ sub update_me {
 	my $downloader_error=1;
 	my $file_contents='';
 	my $output = '';
-	my $b_man = 0;
 	$self_path =~ s/\/$//; # dirname sometimes ends with /, sometimes not
 	$self_download =~ s/\/$//; # dirname sometimes ends with /, sometimes not
 	my $full_self_path = "$self_path/$self_name";
@@ -3163,7 +3178,7 @@ sub update_me {
 			$output .= "Starting download of man page file now.\n";
 			print $output;
 			$output = '';
-			if ($b_man && $download_id eq 'main branch' ){
+			if ($b_man){
 				update_man();
 			}
 			else {
@@ -3188,13 +3203,13 @@ sub update_man {
 	my $man_file_path="$man_file_location/$self_name.1.gz" ;
 	my $output = '';
 	
-	my $downloader_man_error=1;
+	my $b_downloaded = 1;
 	if ( ! -d $man_file_location ){
 		print "The required man directory was not detected on your system.\n";
 		print "Unable to continue: $man_file_location\n";
 		return 0;
 	}
-	if ( -w $man_file_location ){
+	if ( ! -w $man_file_location ){
 		print "Cannot write to $man_file_location! Are you root?\n";
 		print "Unable to continue: $man_file_location\n";
 		return 0;
@@ -3206,24 +3221,23 @@ sub update_man {
 			system( 'mandb' );
 		}
 	}
-	if ( $dl{'dl'} =~ /tiny|wget/){
-		print "Checking Man page download URL...\n";
-		download_file('spider', $man_file_url);
-		$downloader_man_error = $?;
-	}
-	if ( $downloader_man_error == 1 ){
-		if ( $dl{'dl'} =~ /tiny|wget/){
-			print "Man file download URL verified: $man_file_url\n";
-		}
+# 	if ( $dl{'dl'} =~ /^(wget)$/){
+# 		print "Checking Man page download URL...\n";
+# 		$b_downloaded = download_file('spider', $man_file_url);
+# 	}
+	if ( $b_downloaded ){
+# 		if ( $dl{'dl'} =~ /^(wget)$/){
+# 			print "Man file download URL verified: $man_file_url\n";
+# 		}
 		print "Downloading Man page file now.\n";
-		download_file('file', $man_file_url,  $man_file_path );
-		$downloader_man_error = $?;
-		if ( $downloader_man_error == 0 ){
-			print "Oh no! Something went wrong downloading the Man gz file at: $man_file_url\n";
-			print "Check the error messages for what happened. Error: $downloader_man_error\n";
+		# returns perl, 1 for true, 0 for false, even when using shell tool returns
+		$b_downloaded = download_file('file', $man_file_url,  $man_file_path );
+		if ( !$b_downloaded ){
+			print "Oh no! Something went wrong downloading the Man file at: $man_file_url\n";
+			print "Check the error messages for what happened. Error: $b_downloaded\n";
 		}
 		else {
-			print "Download/install of man page successful. Check to make sure it works: man inxi\n";
+			print "Download/install of man page successful.\nCheck to make sure it works: man inxi\n";
 		}
 	}
 	else {
@@ -3265,7 +3279,7 @@ sub set_version_data {
 	open (my $fh, '<', "$self_path/$self_name");
 	while( my $row = <$fh>){
 		chomp $row;
-		$row =~ s/'//g;
+		$row =~ s/'|;//g;
 		if ($row =~ /^my \$self_name/ ){
 			$self_name = (split /=/, $row)[1];
 		}
@@ -3704,6 +3718,7 @@ sub get_options{
 				$self_download = get_defaults('inxi-pinxi');
 			}
 			elsif ($arg && $arg eq '3'){
+				$b_man = 1 if $self_name eq 'inxi';
 				$download_id = 'dev server';
 				$self_download = get_defaults('inxi-dev');
 			}
@@ -3711,6 +3726,7 @@ sub get_options{
 				if (!$arg){
 					$download_id = 'main branch';
 					$self_download = get_defaults('inxi-main');
+					$b_man = 1
 				}
 				elsif ( $arg =~ /^[12]$/){
 					$download_id = "branch $arg";
@@ -3863,8 +3879,8 @@ sub show_options {
 	speed, mac id, state, etc." ],
 	['1', '-N', '--network', "Network card information. With -x, shows PCI BusID, Port number." ],
 	['1', '-o', '--unmounted', "Unmounted $partition_string information (includes UUID and 
-	LABEL if available). Shows file system type if you have file installed, 
-	if you are root OR if you have added to /etc/sudoers (sudo v. 1.7 or 
+	LABEL if available). Shows file system type if you have lsblk installed (GNU/Linux), or for 
+	BSD/Linux: if 'file' installed, if you are root OR if you have added to /etc/sudoers (sudo v. 1.7 or 
 	newer) Example:^<username>^ALL^=^NOPASSWD:^/usr/bin/file^" ],
 	['1', '-p', '--partitions-full', "Full $partition_string information (-P plus all other 
 	detected ${partition_string}s)." ],
@@ -4170,18 +4186,17 @@ sub get_client_name {
 		if (! check_modern_konvi() ){
 			$ppid = getppid();
 			$client_name = (main::grabber("ps -p $ppid"))[1];
-			
-			my @data = split /\s+/, $client_name;
-			if ($bsd_type){
-				$client_name = lc($data[5]);
-			}
-			# gnu/linux uses last value
-			else {
-				$client_name = lc($data[scalar @data - 1]);
-			}
-			$client_name =~ s/.*\|-(|)//;
-			$client_name =~ s/[0-9\.]+$//; # clean things like python2.7
 			if ($client_name){
+				my @data = split /\s+/, $client_name if $client_name;
+				if ($bsd_type){
+					$client_name = lc($data[5]);
+				}
+				# gnu/linux uses last value
+				else {
+					$client_name = lc($data[scalar @data - 1]);
+				}
+				$client_name =~ s/.*\|-(|)//;
+				$client_name =~ s/[0-9\.]+$//; # clean things like python2.7
 				$client{'name'} = $client_name;
 				$client{'native'} = 1;
 				get_client_version();
@@ -4506,27 +4521,27 @@ sub get_size {
 	}
 	elsif ($size > 1024**5){
 		$data[0] = sprintf("%.2f",$size/1024**5);
-		$data[1] = 'EB';
+		$data[1] = 'EiB';
 	}
 	elsif ($size > 1024**4){
 		$data[0] = sprintf("%.2f",$size/1024**4);
-		$data[1] = 'PB';
+		$data[1] = 'PiB';
 	}
 	elsif ($size > 1024**3){
 		$data[0] = sprintf("%.2f",$size/1024**3);
-		$data[1] = 'TB';
+		$data[1] = 'TiB';
 	}
 	elsif ($size > 1024**2){
 		$data[0] = sprintf("%.2f",$size/1024**2);
-		$data[1] = 'GB';
+		$data[1] = 'GiB';
 	}
 	elsif ($size > 1024){
 		$data[0] = sprintf("%.1f",$size/1024);
-		$data[1] = 'MB';
+		$data[1] = 'MiB';
 	}
 	else {
 		$data[0] = sprintf("%.0f",$size);
-		$data[1] = 'KB';
+		$data[1] = 'KiB';
 	}
 	return @data;
 }
@@ -4622,25 +4637,27 @@ sub row_defaults {
 	return $unfound{$type};
 }
 # convert string passed to KB, based on GB/MB/TB id
+# NOTE: K 1024 KB 1000
 sub translate_size {
 	my ($working) = @_;
 	my $size = 0;
 	#print ":$working:\n";
 	return if ! defined $working;
+	my $math = ( $working =~ /B$/) ? 1000: 1024;
 	if ( $working =~ /^([0-9\.]+)M[B]?$/i){
-		$size = $1 * 1024;
+		$size = $1 * $math;
 	}
 	elsif ( $working =~ /^([0-9\.]+)G[B]?$/i){
-		$size = $1 * 1024**2;
+		$size = $1 * $math**2;
 	}
 	elsif ( $working =~ /^([0-9\.]+)T[B]?$/i){
-		$size = $1 * 1024**3;
+		$size = $1 * $math**3;
 	}
 	elsif ( $working =~ /^([0-9\.]+)P[B]?$/i){
-		$size = $1 * 1024**4;
+		$size = $1 * $math**4;
 	}
 	elsif ( $working =~ /^([0-9\.]+)E[B]?$/i){
-		$size = $1 * 1024**5;
+		$size = $1 * $math**5;
 	}
 	elsif ( $working =~ /^([0-9\.]+)K[B]?$/i){
 		$size = $1;
@@ -4659,7 +4676,7 @@ sub check_output_path {
 	$dir = $path;
 	$dir =~ s/([^\/])+$//;
 	$file = $1;
-	$b_good = 1 if (-d $dir && -w $dir && $file);
+	$b_good = 1 if (-d $dir && -w $dir && $file && $dir !~ /^\//);
 	return $b_good;
 }
 
@@ -5761,7 +5778,7 @@ sub create_output_full {
 		$rows[$j]{$num++ . "#bogomips"} = $bogomips;
 	}
 	$j = scalar @rows;
-	my $core_key = (scalar @speeds > 1) ? 'Core speeds' : 'Core speed';
+	my $core_key = (scalar @speeds > 1) ? 'Core speeds (MHz)' : 'Core speed (MHz)';
 	my $speed_key = ($properties{'speed-key'}) ? $properties{'speed-key'}: 'Speed';
 	my $min_max = ($properties{'min-max'}) ? $properties{'min-max'}: 'N/A';
 	my $min_max_key = ($properties{'min-max-key'}) ? $properties{'min-max-key'}: 'min/max';
@@ -7684,6 +7701,9 @@ sub display_server(){
 			if ($drivers[1]){
 				$row[0]{$num++ . "#unloaded"} = $drivers[1];
 			}
+			if ($graphics{'compositor'}){
+				$row[0]{$num++ . "#compositor"} = $graphics{'compositor'};
+			}
 		}
 		if ($resolution){
 			$row[0]{$num++ . "#resolution"} = $resolution;
@@ -9432,7 +9452,7 @@ sub create_output {
 	eval $start if $b_log;
 	my $num = 0;
 	my $j = 0;
-	my (@data,@data2,@rows,$dev,$dev_type);
+	my (@data,@data2,%part,@rows,$dev,$dev_type,$fs);
 	foreach my $ref (@partitions){
 		my %row = %$ref;
 		next if $row{'type'} eq 'secondary' && $show{'partition'};
@@ -9441,7 +9461,7 @@ sub create_output {
 		@data2 = main::get_size($row{'used'}) if (defined $row{'used'});
 		my $used = (@data2) ? $data2[0] . ' ' . $data2[1]: 'N/A';
 		my $percent = (defined $row{'percent-used'}) ? ' (' . $row{'percent-used'} . '%)' : '';
-		my $fs = (defined $row{'fs'})? $row{'fs'}: 'N/A';
+		%part = ();
 		if (defined $row{'dev-base'}){
 			if ($row{'dev-base'} =~ /^non-dev-/){
 				$row{'dev-base'} =~ s/^non-dev-//;
@@ -9464,6 +9484,16 @@ sub create_output {
 		}
 		else {
 			$dev_type = 'dev';
+		}
+		%part = check_lsblk($row{'dev-base'},0) if (@lsblk && $row{'dev-base'} && $dev_type eq 'dev');
+		if (%part){
+			$fs = $part{'fs'};
+		}
+		elsif (defined $row{'fs'}){
+			$fs = $row{'fs'};
+		}
+		else {
+			$fs = 'N/A';
 		}
 		$dev ||= 'N/A';
 		$j = scalar @rows;
@@ -9492,6 +9522,7 @@ sub partition_data {
 	my ($b_fs,$b_load,$cols,$roots) = (1,0,6,0);
 	my ($dev_base,$fs,$id,$label,$percent_used,$size,$type,$uuid,$used);
 	$b_partitions = 1;
+	set_lsblk() if !$bsd_type && !$b_lsblk;
 	# set labels, uuid, gpart
 	main::get_partition_extra_data() if !$b_partition_extra;
 	# most current OS support -T and -k, but -P means different things
@@ -9729,6 +9760,33 @@ sub get_bsd_label_uuid {
 	eval $end if $b_log;
 	return @data;
 }
+sub set_lsblk {
+	eval $start if $b_log;
+	$b_lsblk = 1;
+	if (my $program = main::check_program('lsblk')){
+		@lsblk = main::grabber("$program -r --output NAME,TYPE,RM,FSTYPE,SIZE 2>/dev/null");
+	}
+	main::log_data('dump','@lsblk',\@lsblk) if $b_log;
+	shift @lsblk if @lsblk; # get rid of row headers
+	eval $end if $b_log;
+}
+sub check_lsblk {
+	eval $start if $b_log;
+	my ($name,$b_size) = @_;
+	my (%part,@row);
+	foreach (@lsblk){
+		@row = split /\s+/, $_;
+		next if ! $row[1];
+		if ($name eq $row[0]){
+			$part{'fs'} = $row[3];
+			$part{'size'} = $row[-1] / 1024 if $b_size && $row[-1];
+			$part{'rm'} = $row[2] if defined $row[2];
+			last;
+		}
+	}
+	eval $start if $b_log;
+	return %part;
+}
 sub get_label {
 	eval $start if $b_log;
 	my ($item) = @_;
@@ -9836,7 +9894,7 @@ sub cpu_processes {
 		$b[2] <=> $a[2] } @ps_aux;
 	# if there's a count limit, for irc, etc, only use that much of the data
 	@rows = splice @rows,0,$count;
-	$cpu_mem = ' - Memory: MB / % used' if $extra > 0;
+	$cpu_mem = ' - Memory: MiB / % used' if $extra > 0;
 	$j = scalar @rows;
 	my $throttled = throttled($ps_count,$count,$j);
 	my @data = (
@@ -9863,7 +9921,7 @@ sub cpu_processes {
 		$processes[$j]{$num++ . "#pid"} = $row[1];
 		if ($extra > 0){
 			my $decimals = ($row[5]/1024 > 10 ) ? 1 : 2;
-			$mem = (defined $row[5]) ? sprintf( "%.${decimals}f", $row[5]/1024 ) . 'MB' : 'N/A';
+			$mem = (defined $row[5]) ? sprintf( "%.${decimals}f", $row[5]/1024 ) . 'MiB' : 'N/A';
 			$mem .= ' (' . $row[3] . '%)';
 			$processes[$j]{$num++ . "#mem"} = $mem;
 		}
@@ -9887,7 +9945,7 @@ sub mem_processes {
 	$j = scalar @rows;
 	my $throttled = throttled($ps_count,$count,$j);
 	@data = (
-	{$num++ . "#Memory MB/% used - Command - pid$cpu_mem - top" => "$count$throttled",},
+	{$num++ . "#Memory MiB/% used - Command - pid$cpu_mem - top" => "$count$throttled",},
 	);
 	@processes = (@processes,@data);
 	my $i = 1;
@@ -9896,7 +9954,7 @@ sub mem_processes {
 		$j = scalar @processes;
 		my @row = split /\s+/, $_;
 		my $decimals = ($row[5]/1024 > 10 ) ? 1 : 2;
-		$mem = ($row[5]) ? sprintf( "%.${decimals}f", $row[5]/1024 ) . ' MB' : 'N/A';
+		$mem = ($row[5]) ? sprintf( "%.${decimals}f", $row[5]/1024 ) . ' MiB' : 'N/A';
 		my @command = process_starter(scalar @row, $row[10],$row[11]);
 		if ($extra > 0){
 			$mem .= " (" . $row[2] . "%)"; 
@@ -11049,7 +11107,7 @@ sub get_repos_linux {
 	# apt repos here as well
 	if (-f $apt || -d "$apt.d"){
 		my ($apt_arch,$apt_comp,$apt_suites,$apt_types,@apt_urls,@apt_working,
-		$b_apt_enabled,$file);
+		$b_apt_enabled,$file,$string);
 		my $counter = 0;
 		@files = main::globber('/etc/apt/sources.list.d/*.list');
 		push @files, $apt;
@@ -11081,10 +11139,12 @@ sub get_repos_linux {
 						if ($b_apt_enabled){
 							#print "1: url builder\n";
 							foreach $repo (@apt_working){
-								my $string = $apt_types . ' ' . $repo;
+								$string = $apt_types;
+								$string .= ' [arch=' . $apt_arch . ']' if $apt_arch;
+								$string .= ' ' . $repo;
 								$string .= ' ' . $apt_suites if $apt_suites ;
 								$string .= ' ' . $apt_comp if $apt_comp;
-								$string .= ' ' . $apt_arch if $apt_arch;
+								
 								#print "s1:$string\n";
 								push @data3, $string;
 							}
@@ -11124,10 +11184,11 @@ sub get_repos_linux {
 					#print "2: url builder\n";
 					if ($b_apt_enabled){
 						foreach $repo (@apt_working){
-							my $string = $apt_types . ' ' . $repo;
+							my $string = $apt_types;
+							$string .= ' [arch=' . $apt_arch . ']' if $apt_arch;
+							$string .= ' ' . $repo;
 							$string .= ' ' . $apt_suites if $apt_suites ;
 							$string .= ' ' . $apt_comp if $apt_comp;
-							$string .= ' ' . $apt_arch if $apt_arch;
 							#print "s2:$string\n";
 							push @data3, $string;
 						}
@@ -11147,7 +11208,7 @@ sub get_repos_linux {
 				@apt_urls = url_cleaner(@apt_urls);
 			}
 			else {
-				$key = repo_builder('active','apt');
+				$key = repo_builder('missing','apt');
 			}
 			@data = (
 			{$num++ . "#$key" => $file},
@@ -12482,11 +12543,12 @@ sub create_output {
 sub unmounted_data {
 	eval $start if $b_log;
 	my ($file) = @_;
-	my (@data,@unmounted);
+	my ($fs,$size,@data,%part,@unmounted);
 	my @mounted = ('scd[0-9]+','sr[0-9]+','cdrom[0-9]*','cdrw[0-9]*',
 	'dvd[0-9]*','dvdrw[0-9]*','fd[0-9]','ram[0-9]*');
 	my @mounts = main::reader($file,'strip');
 	my $num = 0;
+	PartitionData::set_lsblk() if !$bsd_type && !$b_lsblk;
 	# set labels, uuid, gpart
 	PartitionData::partition_data() if !$b_partitions;
 	main::get_partition_extra_data() if !$b_partition_extra;
@@ -12494,6 +12556,7 @@ sub unmounted_data {
 	@mounted = get_mounted(@mounted);
 	foreach (@mounts){
 		my @working = split /\s+/, $_;
+		($fs,$size) = ('','');
 		# note that size 1 means it is a logical extended partition container
 		# lvm might have dm-1 type syntax
 		# need to exclude loop type file systems, squashfs for example
@@ -12503,12 +12566,18 @@ sub unmounted_data {
 		     $working[-1] !~ /loop/ && !(grep {$working[-1] =~ /$_/} @mounted)){
 		   my $label = PartitionData::get_label("/dev/$working[-1]");
 		   my $uuid = PartitionData::get_uuid("/dev/$working[-1]");
-		   my $fs = unmounted_filesystem($working[-1]);
+		   %part = PartitionData::check_lsblk($working[-1],0) if (@lsblk && $working[-1]);
+			if (%part){
+				$fs = $part{'fs'};
+				$size = $part{'size'} if $part{'size'} && !$working[2];
+			}
+			$size ||= $working[2];
+		   $fs = unmounted_filesystem($working[-1]) if ! $fs;
 			@data = ({
 			'dev-base' => $working[-1],
 			'fs' => $fs,
 			'label' => $label,
-			'size' => $working[2],
+			'size' => $size,
 			'uuid' => $uuid,
 			});
 			@unmounted = (@unmounted,@data);
@@ -12547,7 +12616,7 @@ sub get_mounted {
 sub unmounted_filesystem {
 	eval $start if $b_log;
 	my ($item) = @_;
-	my ($data);
+	my ($data,%part);
 	my ($file,$fs,$path,$sudo) = ('','','','');
 	if ($path = main::check_program('file')) {
 		$file = $path;
@@ -12915,7 +12984,7 @@ sub get_weather {
 			$weather{'pressure'} = $working[1];
 		}
 		elsif ( $working[0] eq 'heat_index_string' ){
-			$weather{'head-index'} = $working[1];
+			$weather{'heat-index'} = $working[1];
 		}
 		elsif ( $working[0] eq 'windchill_string' ){
 			$weather{'windchill'} = $working[1];
@@ -13715,7 +13784,6 @@ sub get_linux_distro {
 				# if so, use lsb-release, if not, then just use the found file
 				# this is for only those distro's with self named release/version files
 				# because Mint does not use such, it must be done as below 
-				## this if statement requires the spaces and * as it is, else it won't work
 				if ($b_lsb && $file =~ /$lsb_good_s/){
 					$distro_file = $lsb_release;
 				}
@@ -14105,7 +14173,7 @@ sub get_memory_data_linux {
 	my $percent = ($used && $total) ? sprintf("%.1f", ($used/$total)*100) : '';
 	if ($type eq 'string'){
 		$percent = " ($percent%)" if $percent;
-		$memory = sprintf("%.1f/%.1f MB", $used/1024, $total/1024) . $percent;
+		$memory = sprintf("%.1f/%.1f MiB", $used/1024, $total/1024) . $percent;
 	}
 	else {
 		$memory = "$total:$used:$percent";
