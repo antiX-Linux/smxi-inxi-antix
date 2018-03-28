@@ -36,8 +36,8 @@ use POSIX qw(uname strftime ttyname);
 
 ## INXI INFO ##
 my $self_name='inxi';
-my $self_version='2.9.03';
-my $self_date='2018-03-21';
+my $self_version='2.9.08';
+my $self_date='2018-03-26';
 my $self_patch='00';
 ## END INXI INFO ##
 
@@ -759,6 +759,7 @@ sub get_config_item {
 	elsif ($key eq 'OUTPUT_TYPE') {$output_type = $val if $val =~ /^json|screen|xml/}
 	elsif ($key eq 'PS_COUNT') {$ps_count = int($val) }
 	elsif ($key eq 'SENSORS_CPU_NO') {$sensors_cpu_nu = int($val)}
+	elsif ($key eq 'SHOW_HOST' || $key eq 'B_SHOW_HOST') { $show{'host'} = int($val)}
 	# layout
 	elsif ($key eq 'CONSOLE_COLOR_SCHEME') {$colors{'console'} = int($val)}
 	elsif ($key eq 'GLOBAL_COLOR_SCHEME') {$colors{'global'} = int($val)}
@@ -1158,12 +1159,6 @@ sub log_data {
 	}
 }
 
-# args: dbg arg, 1-xx
-sub process_dbg {
-	my ($arg) = @_;
-	if ($arg == 20) {$b_arm = 1}
-}
-
 sub set_debugger {
 	if ( $debug < 10 || $debug > 12){
 		$end = '';
@@ -1372,13 +1367,19 @@ sub disk_data {
 	['df', '-k -T -P'],
 	['df', '-P'],
 	['lsblk', '-fs'],
-	['lsblk', '-rfs'],
+	['lsblk', '-fsr'],
+	['lsblk', '-fsP'],
 	['lsblk', '-a'],
-	['lsblk', '-ra'],
-	['lsblk', '-r --output TYPE,NAME,RM,FSTYPE'],
-	['lsblk', '-r --output TYPE,NAME,RM,FSTYPE,SIZE'],
-	['lsblk', '-br --output TYPE,NAME,RM,FSTYPE,SIZE'],
-	['lsblk', '-Pb --output TYPE,NAME,RM,FSTYPE,SIZE'],
+	['lsblk', '-ar'],
+	['lsblk', '-p'],
+	['lsblk', '-pr'],
+	['lsblk', '-pP'],
+	['lsblk', '-r'],
+	['lsblk', '-r --output TYPE,NAME,PKNAME,RM,FSTYPE,SIZE'],
+	['lsblk', '-rb --output TYPE,NAME,PKNAME,RM,FSTYPE,SIZE'],
+	['lsblk', '-Pb --output TYPE,NAME,PKNAME,RM,FSTYPE,SIZE'],
+	['lsblk', '-rb --output NAME,PKNAME,TYPE,RM,FSTYPE,SIZE'],
+	['lsblk', '-Pb --output NAME,PKNAME,TYPE,RM,FSTYPE,SIZE'],
 	['gpart', 'list'],
 	['gpart', 'show'],
 	['gpart', 'status'],
@@ -1543,6 +1544,7 @@ sub system_data {
 	'cc' => $ENV{'CC'},
 	# @(#)MIRBSD KSH R56 2018/03/09: ksh and mksh
 	'ksh-version' => $ENV{'KSH_VERSION'},
+	'manpath' => $ENV{'MANPATH'},
 	'xdg-config-home' => $ENV{'XDG_CONFIG_HOME'},
 	'xdg-config-dirs' => $ENV{'XDG_CONFIG_DIRS'},
 	'xdg-data-home' => $ENV{'XDG_DATA_HOME'},
@@ -1948,7 +1950,7 @@ sub download_file {
 	if ($dl{'dl'} eq 'tiny' ){
 		$cmd = "Using tiny: type: $type \nurl: $url \nfile: $file";
 		$result = get_file($type, $url, $file);
-		$debug_data = $result;
+		$debug_data = ($type ne 'stdout') ? $result : 'Success: stdout data not null.';
 	}
 	# But: 0 is success, and 1 is false for these
 	# when strings are returned, they will be taken as true
@@ -1957,7 +1959,7 @@ sub download_file {
 			$args = $dl{'stdout'};
 			$cmd = "$dl{'dl'} $dl{'no-ssl-opt'} $timeout $args $url $dl{'null'}";
 			$result = qx($cmd);
-			$debug_data = 'Success: stdout data not null.'
+			$debug_data = ($result) ? 'Success: stdout data not null.' : 'Download resulted in null data!';
 		}
 		elsif ($type eq 'file') {
 			$args = $dl{'file'};
@@ -2078,7 +2080,7 @@ sub set_downloader {
 	else {
 		$dl{'dl'} = '';
 	}
-	# no-ssl-opt is set to 1 with --alt 34, so it is true, then assign
+	# no-ssl-opt is set to 1 with --no-ssl, so it is true, then assign
 	$dl{'no-ssl-opt'} = $dl{'no-ssl'} if $dl{'no-ssl-opt'};
 	eval $end if $b_log;
 }
@@ -2992,6 +2994,7 @@ sub program_version {
 		if ( $ENV{'KSH_VERSION'} ){
 			my @temp = split /\s+/, $ENV{'KSH_VERSION'};
 			if ($temp[2]){
+				$temp[2] =~ s/^v//i; # trim off leading v
 				log_data('data',"Program *ksh array: @temp version: $temp[2]") if $b_log;
 				return $temp[2];
 			}
@@ -3123,6 +3126,9 @@ sub get_defaults {
 	'inxi-main' => 'https://github.com/smxi/inxi/raw/master/',
 	'inxi-pinxi' => 'https://github.com/smxi/inxi/raw/inxi-perl/',
 	'inxi-man' => "https://smxi.org/in/$self_name.1.gz",
+	'inxi-man-gh' => "https://github.com/smxi/inxi/raw/master/$self_name.1",
+	'pinxi-man' => "https://smxi.org/in/$self_name.1.gz",
+	'pinxi-man-gh' => "https://github.com/smxi/inxi/raw/inxi-perl/$self_name.1",
 	);
 	if ( exists $defaults{$type}){
 		return $defaults{$type};
@@ -3159,7 +3165,7 @@ sub update_me {
 	print $output;
 	$output = '';
 	$self_download = "$self_download/$self_name";
-	$file_contents=download_file('stdout', $self_download);
+	$file_contents = download_file('stdout', $self_download);
 	
 	# then do the actual download
 	if (  $file_contents ){
@@ -3179,7 +3185,7 @@ sub update_me {
 			print $output;
 			$output = '';
 			if ($b_man){
-				update_man();
+				update_man($download_id);
 			}
 			else {
 				print "Skipping man download because branch version is being used.\n";
@@ -3198,12 +3204,12 @@ sub update_me {
 }
 
 sub update_man {
-	my $man_file_url=get_defaults('inxi-man'); 
+	my ($download_id) = @_;
 	my $man_file_location=set_man_location();
-	my $man_file_path="$man_file_location/$self_name.1.gz" ;
-	my $output = '';
+	my $man_file_path="$man_file_location/$self_name.1" ;
+	my ($man_file_url,$output) = ('','');
 	
-	my $b_downloaded = 1;
+	my $b_downloaded = 0;
 	if ( ! -d $man_file_location ){
 		print "The required man directory was not detected on your system.\n";
 		print "Unable to continue: $man_file_location\n";
@@ -3221,27 +3227,38 @@ sub update_man {
 			system( 'mandb' );
 		}
 	}
-# 	if ( $dl{'dl'} =~ /^(wget)$/){
-# 		print "Checking Man page download URL...\n";
-# 		$b_downloaded = download_file('spider', $man_file_url);
-# 	}
-	if ( $b_downloaded ){
-# 		if ( $dl{'dl'} =~ /^(wget)$/){
-# 			print "Man file download URL verified: $man_file_url\n";
-# 		}
-		print "Downloading Man page file now.\n";
-		# returns perl, 1 for true, 0 for false, even when using shell tool returns
-		$b_downloaded = download_file('file', $man_file_url,  $man_file_path );
-		if ( !$b_downloaded ){
-			print "Oh no! Something went wrong downloading the Man file at: $man_file_url\n";
-			print "Check the error messages for what happened. Error: $b_downloaded\n";
-		}
-		else {
-			print "Download/install of man page successful.\nCheck to make sure it works: man inxi\n";
+	 # first choice is inxi.1/pinxi.1 from gh, second gz from smxi.org
+	if ( $download_id ne 'dev server' && (my $program = check_program('gzip'))){
+		$man_file_url=get_defaults($self_name . '-man-gh'); 
+		print "Downloading Man page file...\n";
+		$b_downloaded = download_file('file', $man_file_url, $man_file_path);
+		if ($b_downloaded){
+			print "Download successful. Compressing file...\n";
+			system("$program -9 -f $man_file_path > $man_file_path.gz");
+			my $err = $?;
+			if ($err > 0){
+				print "Oh no! Something went wrong compressing the manfile:\n";
+				print "Local path: $man_file_path Error: $err\n";
+			}
+			else {
+				print "Download and install of man page successful.\nCheck to make sure it works: man $self_name\n";
+			}
 		}
 	}
 	else {
-		print "Man file download URL failed, unable to continue: $man_file_url\n";
+		$man_file_url = get_defaults($self_name . '-man'); 
+		# used to use spider tests, but only wget supports that, so no need
+		print "Downloading Man page file gz...\n";
+		$man_file_path .= '.gz';
+		# returns perl, 1 for true, 0 for false, even when using shell tool returns
+		$b_downloaded = download_file('file', $man_file_url,  $man_file_path );
+		if ($b_downloaded) {
+			print "Download and install of man page successful.\nCheck to make sure it works: man $self_name\n";
+		}
+	}
+	if ( !$b_downloaded ){
+		print "Oh no! Something went wrong downloading the Man file at:\n$man_file_url\n";
+		print "Try -U with --dbg 1 for more information on the failure.\n";
 	}
 }
 
@@ -3307,8 +3324,8 @@ sub get_options{
 	eval $start if $b_log;
 	my (@args) = @_;
 	$show{'short'} = 1;
-	my ($b_downloader,$b_recommends,$b_updater,$b_version,$help_type,
-	$self_download, $download_id);
+	my ($b_downloader,$b_no_man,$b_no_man_force,$b_recommends,$b_updater,$b_version,
+	$b_use_man,$help_type,$self_download, $download_id);
 	GetOptions (
 	'A|audio' => sub {
 		$show{'short'} = 0;
@@ -3513,7 +3530,7 @@ sub get_options{
 			}
 			if ($arg >= 7 ){
 				$b_downloader = 1 if ! check_program('dig');
-				$show{'flag'} = 1;
+				$show{'cpu-flag'} = 1;
 				$show{'ip'} = 1;
 				$show{'raid-forced'} = 1;
 				$extra = 3;
@@ -3582,12 +3599,7 @@ sub get_options{
 	## Start non data options
 	'alt:i' => sub { 
 		my ($opt,$arg) = @_;
-		if ($arg == 30) {$b_irc = 0}
-		elsif ($arg == 31) {$show{'host'} = 0}
-		elsif ($arg == 32) {$show{'host'} = 1}
-		elsif ($arg == 33) {$b_dmidecode_force=1}
-		elsif ($arg == 34) {$dl{'no-ssl-opt'}=1}
-		elsif ($arg == 40) {
+		if ($arg == 40) {
 			$dl{'tiny'} = 0;
 			$b_downloader = 1;}
 		elsif ($arg == 41) {
@@ -3607,6 +3619,8 @@ sub get_options{
 		else {
 			error_handler('bad-arg', $opt, $arg);
 		}},
+	'arm' => sub {
+		$b_arm = 1 },
 	'bsd:s' => sub { 
 		my ($opt,$arg) = @_;
 		if ($arg =~ /^dragonfly|freebsd|openbsd|netbsd$/i){
@@ -3620,7 +3634,6 @@ sub get_options{
 		my ($opt,$arg) = @_;
 		if ($arg > 0) {
 			$test[$arg] = 1;
-			process_dbg($arg);
 		}
 		else {
 			error_handler('bad-arg', $opt, $arg);
@@ -3646,6 +3659,8 @@ sub get_options{
 		else {
 			error_handler('bad-arg', $opt, $arg);
 		} },
+	'dmidecode' => sub {
+		$b_dmidecode_force = 1 },
 	'downloader:s' => sub { 
 		my ($opt,$arg) = @_;
 		$arg = lc($arg);
@@ -3680,6 +3695,20 @@ sub get_options{
 		$help_type = 'standard'; },
 	'H|help-full' => sub {
 		$help_type = 'full'; },
+	'host|hostname' => sub {
+		$show{'host'} = 1 },
+	'indent-min:i' => sub {
+		my ($opt,$arg) = @_;
+		if ($arg =~ /^\d+$/){
+			$size{'indent-min'} = 1;
+		}
+		else {
+			error_handler('bad-arg', $opt, $arg);
+		}},
+	'irc' => sub {
+		$b_irc = 1; },
+	'man' => sub {
+		$b_use_man = 1; },
 	'output:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg =~ /^(json|screen|xml)$/){
@@ -3693,6 +3722,12 @@ sub get_options{
 		else {
 			error_handler('bad-arg', $opt, $arg);
 		}},
+	'no-host|no-hostname' => sub {
+		$show{'host'} = 0 },
+	'no-man' => sub {
+		$b_no_man_force = 0; },
+	'no-ssl' => sub {
+		$dl{'no-ssl-opt'}=1 },
 	'output-file:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg){
@@ -3714,11 +3749,12 @@ sub get_options{
 		if ( $b_update ){
 			$b_updater = 1;
 			if (!$arg && $self_name eq 'pinxi'){
+				$b_man = 1;
 				$download_id = 'inxi-perl branch';
 				$self_download = get_defaults('inxi-pinxi');
 			}
 			elsif ($arg && $arg eq '3'){
-				$b_man = 1 if $self_name eq 'inxi';
+				$b_man = 1;
 				$download_id = 'dev server';
 				$self_download = get_defaults('inxi-dev');
 			}
@@ -3726,7 +3762,8 @@ sub get_options{
 				if (!$arg){
 					$download_id = 'main branch';
 					$self_download = get_defaults('inxi-main');
-					$b_man = 1
+					$b_man = 1;
+					$b_use_man = 1;
 				}
 				elsif ( $arg =~ /^[12]$/){
 					$download_id = "branch $arg";
@@ -3756,6 +3793,7 @@ sub get_options{
 	set_downloader() if $b_downloader;
 	show_version() if $b_version;
 	show_options($help_type) if $help_type;
+	$b_man = 0 if (!$b_use_man || $b_no_man_force);
 	update_me( $self_download, $download_id ) if $b_updater;
 	if ($output_type){
 		if ($output_type ne 'screen' && ! $output_file){
@@ -3865,7 +3903,7 @@ sub show_options {
 	$self_name version." ],
 	['1', '-l', '--label', "$partition_string_u labels. Default: short $partition_string -P. 
 	For full -p output, use: -pl (or -plu)." ],
-	['1', '-m', '--memory', "Memory (RAM) data. Physical system memory array(s), capacity, 
+	['1', '-m', '--memory', "Memory (RAM) data. Requires root. Physical system memory array(s), capacity, 
 	how many devices (slots) supported, and individual memory devices 
 	(sticks of memory etc). For devices, shows device locator, size, speed, 
 	type (like: DDR3). If neither -I nor -tm are selected, also shows 
@@ -3888,7 +3926,7 @@ sub show_options {
 	show, but without extra data). Shows, if detected: 
 	/ /boot /home /opt /tmp /usr /var /var/log /var/tmp . 
 	Use -p to see all mounted ${partition_string}s." ],
-	['1', '-r', '--repos', "Distro repository data. Supported repo types: APK; APT; PACMAN; 
+	['1', '-r', '--repos', "Distro repository data. Supported repo types: APK; APT; EOPKG; PACMAN; 
 	PISI; PORTAGE; PORTS (BSDs); SLACKPKG; URPMQ; YUM; ZYPP." ],
 	['1', '-R', '--raid', "RAID data. Shows RAID devices, states, levels, and components, 
 	and extra data with -x/-xx. md-raid: If device is resyncing, shows resync 
@@ -3896,7 +3934,7 @@ sub show_options {
 	['1', '-s', '--sensors', "Sensors output (if sensors installed/configured): mobo/cpu/gpu temp; 
 	detected fan speeds. Gpu temp only for Fglrx/Nvidia drivers. Nvidia shows 
 	screen number for > 1 screens." ],
-	['1', '', '--slots', "Show PCI slots, type, speed, status." ],
+	['1', '', '--slots', "Show PCI slots, type, speed, status. Requires root. " ],
 	['1', '-S', '--system', "System information: host name, kernel, desktop environment 
 	(if in X), distro" ],
 	['1', '-t', '--processes', "Processes. Requires extra options: c^(cpu) m^(memory) cm^(cpu+memory). 
@@ -3909,7 +3947,7 @@ sub show_options {
 	For full -p output, use: -pu (or -plu)." ],
 	['1', '-v', '--verbosity', "Script verbosity levels. Verbosity level number is required. 
 	Should not be used with -b or -F" ],
-	['1', '', '', "Supported levels: 0-7 Example: $self_name^-v^4" ],
+	['1', '', '', "Supported levels: 0-8 Example: $self_name^-v^4" ],
 	['2', '0', '', "Short output, same as: $self_name" ],
 	['2', '1', '', "Basic verbose, -S + basic CPU + -G + basic Disk + -I." ],
 	['2', '2', '', "Networking card (-N), Machine (-M) data, if present, Battery (-B), 
@@ -3958,24 +3996,25 @@ sub show_options {
 	['2', '-I', '', "System GCC, default. With -xx, also show other installed 
 	GCC versions. If running in console, not in IRC client, shows shell 
 	version number, if detected. Init/RC Type and runlevel (if available)." ],
-	['2', '-m', '', "Manufacteror and Part number; Max memory module size (if available)." ],
+	['2', '-m', '', "Max memory module size (if available)." ],
 	['2', '-N -A', '', "Version/port(s)/driver version (if available) for Network/Audio;" ],
 	['2', '-N -A -G', '', "Network, audio, graphics, shows PCI Bus ID/Usb ID 
 	number of card." ],
 	['2', '-R', '', "md-raid: Resync line, shows blocks synced/total blocks." ],
 	['2', '-S', '', "Desktop toolkit if available (GNOME/XFCE/KDE only); Kernel 
 	gcc version" ],
-	['2', '-t', '', "Memory use output to cpu (-xt c), and cpu use to memory (-xt m)." ],
+	['2', '-t', '', "Add memory use output to cpu (-xt c), and cpu use to memory 
+	(-xt m)." ],
 	['2', '--usb', '', "For Devices, show USB speed." ],
 	);
 	push @data, @rows;
 	if ( $b_weather ){
-		@rows = (['2', '-w -W', '', "Wind speed and time zone (-w only)." ]);
+		@rows = (['2', '-w -W', '', "Wind speed, humidity, pressusre, and time zone (-w only)." ]);
 		push @data, @rows;
 	}
 	@rows = (
-	['1', '-xx', '--extra 2', "Show extra, extra data (only works with verbose or line output, 
-	not short form):" ],
+	['1', '-xx', '--extra 2', "Show extra, extra data (only works with verbose 
+	or line output, not short form):" ],
 	['2', '-A', '', "Chip vendor:product ID for each audio device." ],
 	['2', '-B', '', "serial number, voltage (if available)." ],
 	['2', '-C', '', "Minimum CPU speed, if available." ],
@@ -3986,11 +4025,11 @@ sub show_options {
 	['2', '-I', '', "Other detected installed gcc versions (if present). System 
 	default runlevel. Adds parent program (or tty) for shell info if not in IRC
 	(like Konsole or Gterm). Adds Init/RC (if found) version number." ],
-	['2', '-m', '', "Manufacterer, part number; Single/double bank (if found)." ],
+	['2', '-m', '', "Manufacturer, part number; Single/double bank (if found)." ],
 	['2', '-M', '', "Chassis information, bios rom size (dmidecode only), if data for 
 	either is available." ],
 	['2', '-N', '', "Chip vendor:product ID for each nic." ],
-	['2', '-R', '', "md-raid: Superblock (if present); algorythm. Adds 
+	['2', '-R', '', "md-raid: Superblock (if present); algorithm. Adds 
 	system info line (kernel support,read ahead, raid events). If resync, 
 	shows progress bar." ],
 	['2', '-S', '', "Display manager (dm) in desktop output, if in X 
@@ -4000,7 +4039,7 @@ sub show_options {
 	);
 	push @data, @rows;
 	if ( $b_weather ){
-		@rows = (['2', '-w -W', '', "Humidity, barometric pressure." ]);
+		@rows = (['2', '-w -W', '', "Shows windchill, dew poinnt, heat index, if available." ]);
 		push @data, @rows;
 	}
 	@rows = (
@@ -4018,8 +4057,7 @@ sub show_options {
 	push @data, @rows;
 	if ( $b_weather ){
 		@rows = (['2', '-w -W', '', "Location (uses -z/irc filter), weather 
-		observation time, wind chill, heat index, dew point (shows extra lines 
-		for data where relevant)." ] );
+		observation time, altitude (shows extra lines for data where relevant)." ] );
 		push @data, @rows;
 	}
 	@rows = (
@@ -4080,25 +4118,36 @@ sub show_options {
 	[0, '', '', "$line" ],
 	[0, '', '', "Advanced Options:" ],
 	[1, '', '--alt', "Trigger for various advanced options:" ],
-	# ['2', '0', '', "Overrides defective or corrupted data." ],
-	['2', '31', '', "Turns off hostname in output. Useful if showing output from 
-	servers etc." ],
-	['2', '32', '', "Turns on hostname in output." ],
-	['2', '33', '', "Forces use of dmidecode data instead of /sys where 
-	relevant (-M)." ],
-	['2', '34', '', "Skips SSL certificate checks for all downloader activies 
-	(wget/fetch/curl only)." ],
 	['2', '40', '', "Bypass Perl as a downloader option." ],
 	['2', '41', '', "Bypass Curl as a downloader option." ],
 	['2', '42', '', "Bypass Fetch as a downloader option." ],
 	['2', '43', '', "Bypass Wget as a downloader option." ],
-	['2', '44', '', "Bypass Curl, Fetch, and Wget as a downloader options. Forces 
+	['2', '44', '', "Bypass Curl, Fetch, and Wget as downloader options. Forces 
 	Perl if HTTP::Tiny present." ],
 	['1', '', '--display', "Will try to get display data out of X. Default gets it from display 0. 
 	If you use this format: --display 1 it would get it from display 1 instead, or any 
 	display you specify" ],
 	['1', '', '--downloader', "Force $self_name to use [curl|fetch|perl|wget] for downloads." ],
+	['1', '', '--dmidecode', "Forces use of dmidecode data instead of /sys where 
+	relevant (-M)." ],
+	['1', '', '--host', "Turns on hostname in output." ],
+	['1', '', '--indent-min', "Takes value 80 or greater. Increases or decreases the point 
+	where $self_name autowraps line starters." ],
 	['1', '', '--limit', "[-1 - x] -1 removes limit. Raise or lower max output limit of IP addresses for -i." ],
+	);
+	push @data, @rows;
+	if ( $b_update ){
+		@rows = (
+		['1', '', '--man', "Installs correct man version for dev branch (-U 3) or pinxi using -U." ],
+		['1', '', '--no-man', "Disables man install for all updat -U actions." ],
+		);
+		push @data, @rows;
+	}
+	@rows = (
+	['1', '', '--no-host', "Turns off hostname in output. Useful if showing output from 
+	servers etc." ],
+	['1', '', '--no-ssl', "Skips SSL certificate checks for all downloader activities 
+	(wget/fetch/curl only)." ],
 	['1', '', '--output', "Change data output type. Options: [json|screen|xml]. Requires --output-file [path|print]." ],
 	['1', '', '--output-file', "[Full path for output file|print] for --output." ],
 	['1', '', '--sleep', "[0-x.x] - Usually in decimals. Change CPU sleep time for -C (current: $cpu_sleep). Sleep is used to let system catch up and show a more accurate CPU use. Example:^$self_name^-Cxxx^--sleep^0.15" ],
@@ -4613,7 +4662,7 @@ sub row_defaults {
 	'dmesg-boot-missing' => 'dmesg.boot not found',
 	'IP' => "No $id data found. Connected to the web? SSL issues?",
 	'machine-data' => "No machine data: try newer kernel.",
-	'machine-data-alt-33' => "No machine data: try newer kernel. Is dmidecode installed? Try -M --alt 33.",
+	'machine-data-alt-33' => "No machine data: try newer kernel. Is dmidecode installed? Try -M --dmidecode.",
 	'machine-data-dmidecode' => "No machine data: try newer kernel, or install dmidecoce.",
 	'optical-data' => "No Optical or Floppy data was found.",
 	'optical-data-bsd' => "No floppy or optical data found for this BSD system.",
@@ -4674,9 +4723,10 @@ sub check_output_path {
 	my ($path) = @_;
 	my ($b_good,$dir,$file);
 	$dir = $path;
-	$dir =~ s/([^\/])+$//;
+	$dir =~ s/([^\/]+)$//;
 	$file = $1;
-	$b_good = 1 if (-d $dir && -w $dir && $file && $dir !~ /^\//);
+	# print "file: $file : dir: $dir\n";
+	$b_good = 1 if (-d $dir && -w $dir && $dir =~ /^\// && $file);
 	return $b_good;
 }
 
@@ -5081,6 +5131,8 @@ sub show_version {
 		$working_path = readlink "$working_path/$self_name";
 		$working_path =~ s/[^\/]+$//;
 	}
+	# strange output /./ ending, but just trim it off, I don't know how it happens
+	$working_path =~ s%/\./%/%;
 	@row = [ 0, '', '', "$self_name $self_version-$self_patch ($self_date)"];
 	push @data, @row;
 	if ( ! $b_irc ){
@@ -5092,9 +5144,9 @@ sub show_version {
 			push @data, @row;
 		}
 		@rows = (
-		[ 0, '', '', "Website:^https://github.com/smxi/inxi^or^http://smxi.org/" ],
+		[ 0, '', '', "Website:^https://github.com/smxi/inxi^or^https://smxi.org/" ],
 		[ 0, '', '', "IRC:^irc.oftc.net channel:^#smxi" ],
-		[ 0, '', '', "Forums:^http://techpatterns.com/forums/forum-33.html" ],
+		[ 0, '', '', "Forums:^https://techpatterns.com/forums/forum-33.html" ],
 		[ 0, '', '', " " ],
 		[ 0, '', '', "$self_name - the universal, portable, system information tool 
 		for console and irc." ],
@@ -5110,7 +5162,7 @@ sub show_version {
 		[ 0, '', '', "This program is free software; you can redistribute it and/or modify 
 		it under the terms of the GNU General Public License as published by the Free Software 
 		Foundation; either version 3 of the License, or (at your option) any later version. 
-		(http://www.gnu.org/licenses/gpl.html)" ]
+		(https://www.gnu.org/licenses/gpl.html)" ]
 		);
 		push @data, @rows;
 	}
@@ -5193,7 +5245,7 @@ sub card_data {
 			$num++ . "#driver" => $driver,
 			},);
 			@rows = (@rows,@data);
-			if ($extra > 1 && !$bsd_type){
+			if ($extra > 0 && !$bsd_type){
 				if ($row[9] ){
 					my $version = main::get_module_version($row[9]);
 					$rows[$j]{$num++ . "#v"} = $version if $version;
@@ -5479,7 +5531,7 @@ sub create_output {
 		$condition ||= 'N/A';
 		$j = scalar @rows;
 		@data = ({
-		$num++ . "#$key" => '',
+		$num++ . "#ID" => $key,
 		$num++ . "#charge" => $charge,
 		$num++ . "#condition" => $condition,
 		},);
@@ -5550,7 +5602,6 @@ sub battery_data_sys {
 		$b_ma = 0;
 		$id = $item;
 		$id =~ s%/sys/class/power_supply/|\/$%%g;
-		$id =~ s/(BAT|CMB)/$1-/;
 		$battery{$id} = ({});
 		foreach $file (@items){
 			$path = "$item$file";
@@ -5586,6 +5637,12 @@ sub battery_data_sys {
 				elsif ($file eq 'charge_now'){
 					$value = $value/1000000;
 					$b_ma = 1;
+				}
+				elsif ($file eq 'manufacturer'){
+					$value = main::dmi_cleaner($value);
+				}
+				elsif ($file eq 'model_name'){
+					$value = main::dmi_cleaner($value);
 				}
 			}
 			$battery{$id}{$file} = $value;
@@ -5636,7 +5693,7 @@ sub battery_data_dmi {
 		my @ref = @$_;
 		# Portable Battery
 		if ($ref[0] == 22){
-			$id = "BAT-$i";
+			$id = "BAT$i";
 			$i++;
 			$battery{$id} = ({});
 			# skip first three row, we don't need that data
@@ -5645,10 +5702,10 @@ sub battery_data_dmi {
 				my @value = split /:\s+/, $item;
 				next if !$value[0];
 				if ($value[0] eq 'Location') {$battery{$id}{'location'} = $value[1] }
-				elsif ($value[0] eq 'Manufacturer') {$battery{$id}{'manufacturer'} = $value[1] }
+				elsif ($value[0] eq 'Manufacturer') {$battery{$id}{'manufacturer'} = main::dmi_cleaner($value[1]) }
 				elsif ($value[0] =~ /Chemistry/) {$battery{$id}{'technology'} = $value[1] }
 				elsif ($value[0] =~ /Serial Number/) {$battery{$id}{'serial_number'} = $value[1] }
-				elsif ($value[0] =~ /^Name/) {$battery{$id}{'model_name'} = $value[1] }
+				elsif ($value[0] =~ /^Name/) {$battery{$id}{'model_name'} = main::dmi_cleaner($value[1]) }
 				elsif ($value[0] eq 'Design Capacity') {
 					$value[1] =~ s/\s*mwh$//i;
 					$battery{$id}{'energy_full_design'} = sprintf( "%.1f", $value[1]/1000);
@@ -5746,7 +5803,7 @@ sub create_output_full {
 		my $arch = $cpu{'arch'};
 		$arch ||= 'N/A';
 		$rows[$j]{$num++ . "#arch"} = $arch;
-		if ($extra > 1 && $arch ne 'N/A' && $cpu{'rev'} ){
+		if ( $arch ne 'N/A' && $cpu{'rev'} ){
 			$rows[$j]{$num++ . "#rev"} = $cpu{'rev'};
 		}
 	}
@@ -7563,10 +7620,13 @@ sub display_server(){
 	my $num = 0;
 	# note: this may not always be set, it won't be out of X, for example
 	my $server = $ENV{'XDG_SESSION_TYPE'};
-	if ($extra > 1){
-		$graphics{'compositor'} = display_compositor();
-	}
+	
 	$server = $ENV{'WAYLAND_DISPLAY'} if (!$server && $ENV{'WAYLAND_DISPLAY'});
+	if ($extra > 1){
+		# initial tests, if wayland, it is certainly a compositor
+		$server = lc($server) if $server;
+		$graphics{'compositor'} = display_compositor($server);
+	}
 	if ( $show{'display-data'}){
 		# X vendor and version detection.
 		# new method added since radeon and X.org and the disappearance of 
@@ -7797,12 +7857,14 @@ sub gl_data(){
 			@row = ({
 			$num++ . "#OpenGL" => '',
 			$num++ . "#renderer" => $renderer,
-			$num++ . "#version" => $version,
+			$num++ . "#v" => $version,
 			});
 			if ($b_compat && $extra > 1 && $compat_version){
 				$row[0]{$num++ . "#compat-v"} = $compat_version;
 			}
-			$row[0]{$num++ . "#direct render"} = $direct_render;
+			if ($extra > 0){
+				$row[0]{$num++ . "#direct render"} = $direct_render;
+			}
 		}
 		else {
 			@row = ({
@@ -7894,7 +7956,7 @@ sub x_drivers {
 			}
 		}
 		my $sep = '';
-		foreach (keys %drivers){
+		foreach (sort keys %drivers){
 			if ($drivers{$_} eq 'loaded') {
 				$sep = ($loaded) ? ',' : '';
 				$loaded .= $sep . $_;
@@ -7942,26 +8004,25 @@ sub x_version {
 	eval $end if $b_log;
 	return $version;
 }
-sub display_compositor(){
+# $1 - server: wayland|x11
+sub display_compositor {
 	eval $start if $b_log;
+	my ($server) = @_; 
 	my ($compositor) = ('');
-	# my $compositors = 'mutter|gnome-shell|kwin|moblin|kmscon|sway|grefson|';
-	# $compositors .= 'westford|rustland|fireplace|wayhouse|weston|compton|compiz|swc|dwc';
-# 	foreach (@ps_cmd){
-# 		if (/($compositors)/){
-# 			$compositor = $1;
-# 			last;
-# 		}
-# 	}
 	# NOTE: chains of greps of ps data are VERY expensive, so check for program presence
 	if (main::check_program('mutter') && (grep {/mutter/} @ps_cmd ) ) {
 		$compositor = 'mutter';
 	}
-	elsif (main::check_program('gnome-shell') && (grep {/gnome-shell/} @ps_cmd ) ) {
-		$compositor = 'gnome-shell';
-	}
-	elsif (main::check_program('kwin') && (grep {/kwin/} @ps_cmd ) ) {
+	elsif (main::check_program('kwin') && (grep {/\bkwin\b/} @ps_cmd ) ) {
 		$compositor = 'kwin';
+	}
+	elsif (main::check_program('muffin') && (grep {/muffin/} @ps_cmd ) ) {
+		$compositor = 'muffin';
+	}
+	# Note: other strings have gnome-shell in them, so important to get exact one. Since we 
+	# can't fully trust how this will appear, the pattern should tighten it
+	elsif (main::check_program('gnome-shell') && (grep {/^(\/[\S]+\/)?gnome-shell(\s|$)/} @ps_cmd ) ) {
+		$compositor = 'gnome-shell';
 	}
 	elsif (main::check_program('weston') && (grep {/weston/} @ps_cmd ) ) {
 		$compositor = 'weston';
@@ -7982,7 +8043,7 @@ sub display_compositor(){
 		$compositor = 'kmscon';
 	}
 	# did not find in debian apt
-	elsif (main::check_program('sway') && (grep {/sway/} @ps_cmd ) ) {
+	elsif (main::check_program('sway') && (grep {/\bsway\b/} @ps_cmd ) ) {
 		$compositor = 'sway';
 	}
 	# did not find in debian apt
@@ -8006,11 +8067,11 @@ sub display_compositor(){
 		$compositor = 'wayhouse';
 	}
 	# did not find in debian apt
-	elsif (main::check_program('swc') && (grep {/swc/} @ps_cmd ) ) {
+	elsif (main::check_program('swc') && (grep {/\bswc\b/} @ps_cmd ) ) {
 		$compositor = 'swc';
 	}
 	# did not find in debian apt
-	elsif (main::check_program('dwc') && (grep {/dwc/} @ps_cmd ) ) {
+	elsif (main::check_program('dwc') && (grep {/\bdwc\b/} @ps_cmd ) ) {
 		$compositor = 'dwc';
 	}
 	main::log_data('data',"compositor: $compositor") if $b_log;
@@ -9453,6 +9514,7 @@ sub create_output {
 	my $num = 0;
 	my $j = 0;
 	my (@data,@data2,%part,@rows,$dev,$dev_type,$fs);
+	@partitions = sort { $a->{'id'} cmp $b->{'id'} } @partitions;
 	foreach my $ref (@partitions){
 		my %row = %$ref;
 		next if $row{'type'} eq 'secondary' && $show{'partition'};
@@ -9487,10 +9549,10 @@ sub create_output {
 		}
 		%part = check_lsblk($row{'dev-base'},0) if (@lsblk && $row{'dev-base'} && $dev_type eq 'dev');
 		if (%part){
-			$fs = $part{'fs'};
+			$fs = lc($part{'fs'});
 		}
 		elsif (defined $row{'fs'}){
-			$fs = $row{'fs'};
+			$fs = lc($row{'fs'});
 		}
 		else {
 			$fs = 'N/A';
@@ -9894,12 +9956,15 @@ sub cpu_processes {
 		$b[2] <=> $a[2] } @ps_aux;
 	# if there's a count limit, for irc, etc, only use that much of the data
 	@rows = splice @rows,0,$count;
-	$cpu_mem = ' - Memory: MiB / % used' if $extra > 0;
+	
 	$j = scalar @rows;
+	# $cpu_mem = ' - Memory: MiB / % used' if $extra > 0;
 	my $throttled = throttled($ps_count,$count,$j);
-	my @data = (
-	{$num++ . "#CPU  % used - Command - pid$cpu_mem - top" => "$count$throttled",},
-	);
+	#my $header = "CPU  % used - Command - pid$cpu_mem - top";
+	#my $header = "Top $count by CPU";
+	my @data = ({
+	$num++ . "#CPU top" => "$count$throttled",
+	},);
 	@processes = (@processes,@data);
 	my $i = 1;
 	foreach (@rows){
@@ -9907,13 +9972,11 @@ sub cpu_processes {
 		$j = scalar @processes;
 		my @row = split /\s+/, $_;
 		my @command = process_starter(scalar @row, $row[10],$row[11]);
-		@data = (
-		{
+		@data = ({
 		$num++ . "#" . $i++ => '',
 		$num++ . "#cpu" => $row[2] . '%',
 		$num++ . "#command" => $command[0],
-		},
-		);
+		},);
 		@processes = (@processes,@data);
 		if ($command[1]) {
 			$processes[$j]{$num++ . "#started by"} = $command[1];
@@ -9940,13 +10003,16 @@ sub mem_processes {
 		my @b = split(/\s+/,$b); 
 		$b[5] <=> $a[5] } @ps_aux;
 	@rows = splice @rows,0,$count;
+	#print Data::Dumper::Dumper \@rows;
 	@processes = main::memory_data_full('process') if !$b_mem;
-	$cpu_mem = ' - CPU: % used' if $extra > 0;
 	$j = scalar @rows;
 	my $throttled = throttled($ps_count,$count,$j);
-	@data = (
-	{$num++ . "#Memory MiB/% used - Command - pid$cpu_mem - top" => "$count$throttled",},
-	);
+	#$cpu_mem = ' - CPU: % used' if $extra > 0;
+	#my $header = "Memory MiB/% used - Command - pid$cpu_mem - top";
+	#my $header = "Top $count by Memory";
+	@data = ({
+	$num++ . "#Memory top" => "$count$throttled",
+	},);
 	@processes = (@processes,@data);
 	my $i = 1;
 	foreach (@rows){
@@ -9956,16 +10022,12 @@ sub mem_processes {
 		my $decimals = ($row[5]/1024 > 10 ) ? 1 : 2;
 		$mem = ($row[5]) ? sprintf( "%.${decimals}f", $row[5]/1024 ) . ' MiB' : 'N/A';
 		my @command = process_starter(scalar @row, $row[10],$row[11]);
-		if ($extra > 0){
-			$mem .= " (" . $row[2] . "%)"; 
-		}
-		@data = (
-		{
+		$mem .= " (" . $row[3] . "%)"; 
+		@data = ({
 		$num++ . "#" . $i++ => '',
 		$num++ . "#mem" => $mem,
 		$num++ . "#command" => $command[0],
-		},
-		);
+		},);
 		@processes = (@processes,@data);
 		if ($command[1]) {
 			$processes[$j]{$num++ . "#started by"} = $command[1];
@@ -10001,7 +10063,7 @@ sub throttled {
 	my ($ps_count,$count,$j) = @_;
 	my $throttled = '';
 	if ($count > $j){
-		$throttled = " (only $j processes)";
+		$throttled = " ( $j processes)";
 	}
 	elsif ($count < $ps_count){
 		$throttled = " (throttled from $ps_count)";
@@ -10618,7 +10680,7 @@ sub create_output {
 					$mod{'manufacturer'} ||= 'N/A';
 					$rows[$j]{$num++ . "#manufacturer"} = $mod{'manufacturer'};
 					$mod{'part-number'} ||= 'N/A';
-					$rows[$j]{$num++ . "#part-nu"} = $mod{'part-number'};
+					$rows[$j]{$num++ . "#part-no"} = $mod{'part-number'};
 				}
 				if ($extra > 2 ){
 					$mod{'serial'} ||= 'N/A';
@@ -11008,16 +11070,16 @@ sub process_size {
 	return 'N/A' if ( ! $size );
 	return $size if $size =~ /\D/;
 	if ( $size < 1024 ){
-		$unit='MB';
+		$unit='MiB';
 	}
 	elsif ( $size < 1024000 ){
 		$size = $size / 1024;
-		$unit='GB';
+		$unit='GiB';
 		$b_trim = 1;
 	}
 	elsif ( $size < 1024000000 ){
 		$size = $size / 1024000;
-		$unit='TB';
+		$unit='TiB';
 		$b_trim = 1;
 	}
 	# we only want a max 2 decimal places, and only when it's 
@@ -11401,7 +11463,6 @@ sub get_repos_linux {
 					if ($url && $title && defined $enabled){
 						if ($enabled > 0){
  							push @content, "$title ~ $url";
- 							print "here $title\n";
  						}
  						($enabled,$url,$title) = (undef,'','');
 					}
@@ -11607,6 +11668,27 @@ sub get_repos_bsd {
 		@data = repo_builder($netbsd,'netbsd','^\s*[^#]+$');
 		@rows = (@rows,@data);
 	}
+	# BSDs do not default always to having repo files, so show correct error 
+	# mesage in that case
+	if (!@rows){
+		if ($bsd_type eq 'freebsd'){
+			$key = repo_builder('missing','freebsd-nf');
+		}
+		elsif ($bsd_type eq 'openbsd'){
+			$key = repo_builder('missing','openbsd-nf');
+		}
+		elsif ($bsd_type eq 'netbsd'){
+			$key = repo_builder('missing','netbsd-nf');
+		}
+		else {
+			$key = repo_builder('missing','bsd-nf');
+		}
+		@data = (
+		{$num++ . "#Message" => $key},
+		[()],
+		);
+		@rows = (@rows,@data);
+	}
 	eval $start if $b_log;
 	return @rows;
 }
@@ -11615,42 +11697,46 @@ sub repo_builder {
 	my ($file,$type,$search,$split,$count) = @_;
 	my (@content,@data,$missing,$key);
 	my %unfound = (
-	'apk' => 'No APK repos found in',
-	'apt' => 'No apt repos found in',
+	'apk' => 'No active APK repos in',
+	'apt' => 'No active apt repos in',
 	'bsd-package' => 'No enabled BSD pkg servers in',
+	'bsd-nf' => 'No BSD pkg server files found',
 	'eopkg' => 'No active eopkg repos found',
-	'pacman' => 'No Pacman repos found in',
+	'pacman' => 'No active pacman repos in',
 	'pisi' => 'No active pisi repos found',
 	'portage' => 'No enabled portage sources in',
-	'portsnap' => 'No ports servers found in',
-	'freebsd' => 'No FreeBSD update servers found in',
-	'freebsd-pkg' => 'No FreeBSD default pkg server found in',
-	'openbsd' => 'No OpenBSD pkg mirrors found in',
-	'netbsd' => 'No NetBSD pkg servers found in',
-	'slackpkg' => 'No slackpkg sources found in',
-	'slackpkg+' => 'No slackpkg+ sources found in',
-	'yum' => 'No yum sources found in',
-	'zypp' => 'No zypp sources found in',
+	'portsnap' => 'No ports servers in',
+	'freebsd' => 'No FreeBSD update servers in',
+	'freebsd-nf' => 'No FreeBSD update server files found',
+	'freebsd-pkg' => 'No FreeBSD default pkg server in',
+	'openbsd' => 'No OpenBSD pkg mirrors in',
+	'openbsd-nf' => 'No OpenBSD pkg mirror files found',
+	'netbsd' => 'No NetBSD pkg servers in',
+	'netbsd-nf' => 'No NetBSD pkg server files found',
+	'slackpkg' => 'No active slackpkg repos in',
+	'slackpkg+' => 'No active slackpkg+ repos in',
+	'yum' => 'No active yum repos in',
+	'zypp' => 'No active zypp repos in',
 	);
 	$missing = $unfound{$type};
 	return $missing if $file eq 'missing';
 	my %keys = (
 	'apk' => 'APK repo',
-	'apt' => 'Active apt sources in',
+	'apt' => 'Active apt repos in',
 	'bsd-package' => 'BSD enabled pkg servers in',
 	'eopkg' => 'Active eopkg repo',
 	'freebsd' => 'FreeBSD update server',
 	'freebsd-pkg' => 'FreeBSD default pkg server',
-	'pacman' => 'Active Pacman repo servers in',
+	'pacman' => 'Active pacman repo servers in',
 	'pisi' => 'Active pisi repo',
 	'portage' => 'Enabled portage sources in',
 	'portsnap' => 'BSD ports server',
 	'openbsd' => 'OpenBSD pkg mirror',
 	'netbsd' => 'NetBSD pkg servers',
-	'slackpkg' => 'slackpkg sources',
-	'slackpkg+' => 'slackpkg+ sources',
-	'yum' => 'Active yum sources in',
-	'zypp' => 'Active zypp sources in',
+	'slackpkg' => 'slackpkg repos in',
+	'slackpkg+' => 'slackpkg+ repos in',
+	'yum' => 'Active yum repos in',
+	'zypp' => 'Active zypp repos in',
 	);
 	$key = $keys{$type};
 	return $key if $file eq 'active';
@@ -11772,7 +11858,7 @@ sub create_output {
 	if (!@fan_main && !@fan_default){
 		$fan_def = 'N/A';
 	}
-	$rows[$j]{$num++ . '#Fan Speeds (in RPM)'} = $fan_def;
+	$rows[$j]{$num++ . '#Fan Speeds (RPM)'} = $fan_def;
 	my $b_cpu = 0;
 	for (my $i = 0; $i < scalar @fan_main; $i++){
 		next if $i == 0;# starts at 1, not 0
@@ -11884,7 +11970,6 @@ sub sensors_data {
 			$sensors{'cpu-temp'} = $1;
 			$working_unit = $2;
 			$sensors{'temp-unit'} = set_temp_unit($sensors{'temp-unit'},$working_unit) if $working_unit;
-			print "here\n";
 		}
 		if (/^PECI\sAgent\s0.*:([0-9\.]+)[\s°]*(C|F)/i) {
 			$sensors{'cpu-peci-temp'} = $1;
@@ -12518,7 +12603,7 @@ sub create_output {
 		my @data2 = main::get_size($row{'size'}) if (defined $row{'size'});
 		my $size = (@data2) ? $data2[0] . ' ' . $data2[1]: 'N/A';
 		if ($row{'fs'}){
-			$fs = $row{'fs'};
+			$fs = lc($row{'fs'});
 		}
 		else {
 			if (main::check_program('file')){
@@ -12624,7 +12709,7 @@ sub unmounted_filesystem {
 	# order matters in this test!
 	my @filesystems = ('ext2','ext3','ext4','ext5','ext','ntfs',
 	'fat32','fat16','FAT\s\(.*\)','vfat','fatx','tfat','swap','btrfs',
-	'ffs','hfs\+','hfs\splus','hfs\sextended\sversion\s[1-9]','hfsj',
+	'ffs','hammer','hfs\+','hfs\splus','hfs\sextended\sversion\s[1-9]','hfsj',
 	'hfs','jfs','nss','reiserfs','reiser4','ufs2','ufs','xfs','zfs');
 	if ($file){
 		# only use sudo if not root, -n option requires sudo -V 1.7 or greater. 
@@ -12905,7 +12990,7 @@ sub create_output {
 	if ($extra > 2){
 		if (!$show{'filter'}){
 			$rows[0]{$num++ . "#Location"} = $location[1];
-			$rows[0]{$num++ . "#Altitude"} = $weather{'elevation'};
+			$rows[0]{$num++ . "#altitude"} = $weather{'elevation'};
 		}
 	}
 	$rows[0]{$num++ . "#Time"} = $weather{'date-time'};
@@ -13746,7 +13831,7 @@ sub get_linux_distro {
 	my ($distro_file) = ('');
 	my ($b_osr,@working);
 	my @derived = qw(antix-version aptosid-version kanotix-version knoppix-version 
-	mandrake-release mx-version pardus-release porteus-version sabayon-release 
+	mandrake-release manjaro-release mx-version pardus-release porteus-version sabayon-release 
 	siduction-version sidux-version slitaz-release solusos-release turbolinux-release 
 	zenwalk-version);
 	my $derived_s = join "|", @derived;
@@ -13893,7 +13978,7 @@ sub get_linux_distro {
 }
 sub get_lsb_release {
 	eval $start if $b_log;
-	my ($distro,$id,$release,$codename,$description,) = ('','','','','');
+	my ($distro,$id,$release,$codename,$description) = ('','','','','');
 	my @content = main::reader('/etc/lsb-release');
 	main::log_data('dump','@content',\@content) if $b_log;
 	@content = map {s/,|\*|\\||\"|[:\47]|^\s+|\s+$|n\/a//ig; $_} @content if @content;
@@ -13902,9 +13987,13 @@ sub get_lsb_release {
 		my @working = split /\s*=\s*/, $_;
 		next if !$working[0];
 		if ($working[0] eq 'DISTRIB_ID' && $working[1]){
-			if ($working[1] =~ /^Arch$/i){
-				$id = 'Arch Linux';
+			if ($working[1] =~ /^Manjaro/i){
+				$id = 'Manjaro Linux';
 			}
+			# in the old days, arch used lsb_release
+# 			elsif ($working[1] =~ /^Arch$/i){
+# 				$id = 'Arch Linux';
+# 			}
 			else {
 				$id = $working[1];
 			}
@@ -13928,7 +14017,6 @@ sub get_lsb_release {
 		$distro = "$id $release $codename";
 		$distro =~ s/^\s+|\s\s+|\s+$//g; # get rid of double and trailling spaces 
 	}
-	
 	eval $end if $b_log;
 	return $distro;
 }
@@ -14447,6 +14535,9 @@ sub get_shell_source {
 			}
 			#print "shell parent 2: $shell_parent\n";
 		}
+		# to work around a ps -p or gnome-terminal bug, which returns 
+		# gnome-terminal- trim - off end 
+		$shell_parent =~ s/-$//;
 	}
 	if ($b_log){
 		$self_parent ||= '';
@@ -14568,7 +14659,7 @@ sub get_usb_drivers {
 		#print join "\n", @drivers, "\n";
 		$driver = join ',', @drivers if @drivers;
 	}
-	@temp = ("$driver","$path");
+	@temp = ($driver,$path);
 	eval $end if $b_log;
 	return @temp;
 }
@@ -14629,8 +14720,9 @@ sub set_dmesg_boot_data {
 			push @temp, $_;
 		}
 		@dmesg_boot = @temp;
+		# FreeBSD: 'da*' is a USB device 'ada*' is a SATA device 'mmcsd*' is an SD card
 		if ($b_dm_boot_disk && @dmesg_boot){
-			@dm_boot_disk = grep {/^(ad|ada|mmcblk|nvme[0-9]+n|sd|wd)[0-9]+(:|\sat\s)/} @dmesg_boot;
+			@dm_boot_disk = grep {/^(ad|ada|da|mmcblk|mmcsd|nvme[0-9]+n|sd|wd)[0-9]+(:|\sat\s)/} @dmesg_boot;
 			log_data('dump','@dm_boot_disk',\@dm_boot_disk) if $b_log;
 			print Dumper \@dm_boot_disk if $test[9];
 		}
@@ -15596,9 +15688,6 @@ sub generate_info_data {
 		$b_gcc = 1;
 	}
 	$gcc ||= 'N/A';
-	if ($extra > 0 && $client{'version'}){
-		$client .= ' ' . $client{'version'};
-	}
 	if (!$b_irc && $extra > 1 ){
 		# bsds don't support -f option to get PPID
 		if ($b_display && !$bsd_type){
@@ -15680,7 +15769,11 @@ sub generate_info_data {
 			$data{$data_name}[$index]{$num++ . '#clang'} = $clang_version;
 		}
 	}
+	
 	$data{$data_name}[$index]{$num++ . '#' . $client_shell} =  $client;
+	if ($extra > 0 && $client{'version'}){
+		$data{$data_name}[$index]{$num++ . '#v'} = $client{'version'};
+	}
 	if ( $running_in ){
 		$data{$data_name}[$index]{$num++ . '#running in'} = $running_in;
 	}

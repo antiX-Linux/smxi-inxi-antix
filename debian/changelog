@@ -1,3 +1,15 @@
+smxi-inxi-antix (0.4.5) unstable; urgency=medium
+
+  * inxi 2.9.08
+
+ -- anticapitalista <antix@operamail.com>  Tue, 27 Mar 2018 16:26:04 +0300
+
+smxi-inxi-antix (0.4.4) unstable; urgency=medium
+
+  * inxi 2.9.05
+
+ -- anticapitalista <antix@operamail.com>  Fri, 23 Mar 2018 18:29:50 +0200
+
 smxi-inxi-antix (0.4.3) unstable; urgency=medium
 
   * Using perl based inxi
